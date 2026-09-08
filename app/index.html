@@ -17,6 +17,9 @@
       <div class="top-bar top-bar-setup">
         <div class="top-bar-left"></div>
         <div class="top-bar-right">
+          <button type="button" id="sync-open-btn" class="icon-btn" aria-label="Sync with another device">
+            <i class="ti ti-devices" aria-hidden="true"></i>
+          </button>
           <button type="button" class="icon-btn theme-toggle-btn" aria-label="Toggle theme">
             <i class="ti ti-moon theme-toggle-icon" aria-hidden="true"></i>
           </button>
@@ -80,6 +83,7 @@
     <header class="top-bar">
       <div class="top-bar-left">
         <span class="app-title-small">Cadence</span>
+        <span id="sync-status-badge" class="sync-status-badge" hidden></span>
       </div>
       <div class="top-bar-right">
         <button type="button" class="icon-btn theme-toggle-btn" aria-label="Toggle theme">
@@ -125,6 +129,116 @@
     </button>
   </section>
 
+  <!-- Viewer: read-only mirror of another device's meeting. No role grid,
+       no start/stop/end controls — just the currently-speaking role and
+       overall progress. Theme and alerts stay local to this device. -->
+  <section id="viewer-screen" class="screen" hidden>
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <span class="app-title-small">Cadence</span>
+        <span class="sync-status-badge">Viewer</span>
+      </div>
+      <div class="top-bar-right">
+        <button type="button" class="icon-btn theme-toggle-btn" aria-label="Toggle theme">
+          <i class="ti ti-moon theme-toggle-icon" aria-hidden="true"></i>
+        </button>
+        <button type="button" id="viewer-alerts-btn" class="icon-btn" aria-label="Alert settings">
+          <i class="ti ti-settings" aria-hidden="true"></i>
+        </button>
+        <button type="button" id="viewer-leave-btn" class="icon-btn" aria-label="Leave">
+          <i class="ti ti-logout" aria-hidden="true"></i>
+        </button>
+      </div>
+    </header>
+
+    <div class="pace-bar-wrap">
+      <div class="pace-bar" id="viewer-pace-bar" role="img" aria-label="Meeting pace">
+        <div class="pace-bar-fill" id="viewer-pace-bar-fill"></div>
+        <div class="pace-bar-tick" id="viewer-pace-bar-tick"></div>
+      </div>
+      <p class="pace-label" id="viewer-pace-label">On pace</p>
+    </div>
+
+    <div class="viewer-spotlight-wrap">
+      <div class="role-card viewer-spotlight" id="viewer-spotlight-card">
+        <div class="role-card-fill" id="viewer-spotlight-fill"></div>
+        <span class="role-card-overflow-label" id="viewer-spotlight-overflow"></span>
+        <div class="role-card-content">
+          <span class="role-card-name viewer-spotlight-name" id="viewer-spotlight-name">Waiting for host…</span>
+          <span class="role-card-subtitle viewer-spotlight-subtitle" id="viewer-spotlight-subtitle"></span>
+        </div>
+      </div>
+    </div>
+
+    <footer class="bottom-bar">
+      <div class="stat">
+        <span class="stat-value" id="viewer-stat-elapsed">0:00</span>
+        <span class="stat-label">Elapsed</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="viewer-stat-remaining">0:00</span>
+        <span class="stat-label" id="viewer-stat-remaining-label">Remaining</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="viewer-stat-budget">0:00</span>
+        <span class="stat-label">Budget</span>
+      </div>
+    </footer>
+  </section>
+
+  <div id="viewer-alerts-dialog" class="confirm-overlay" hidden>
+    <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="viewer-alerts-title">
+      <p id="viewer-alerts-title" class="confirm-title">Alerts (this device)</p>
+      <label class="toggle-row">
+        <span class="toggle-row-label"><i class="ti ti-volume-2" aria-hidden="true"></i> Sound</span>
+        <span class="switch">
+          <input type="checkbox" id="viewer-sound-toggle" checked>
+          <span class="switch-track"></span>
+        </span>
+      </label>
+      <label class="toggle-row">
+        <span class="toggle-row-label"><i class="ti ti-device-mobile-vibrate" aria-hidden="true"></i> Vibration</span>
+        <span class="switch">
+          <input type="checkbox" id="viewer-vibration-toggle" checked>
+          <span class="switch-track"></span>
+        </span>
+      </label>
+      <div class="confirm-actions">
+        <button type="button" class="btn btn-primary" id="viewer-alerts-close-btn">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="sync-dialog" class="confirm-overlay" hidden>
+    <div class="confirm-box sync-box" role="dialog" aria-modal="true" aria-labelledby="sync-title">
+      <p id="sync-title" class="confirm-title">Sync with another device</p>
+
+      <div class="sync-tabs" role="tablist">
+        <button type="button" class="sync-tab is-active" data-sync-tab="host" role="tab" aria-selected="true">Host</button>
+        <button type="button" class="sync-tab" data-sync-tab="join" role="tab" aria-selected="false">Join</button>
+      </div>
+
+      <div class="sync-panel" data-sync-panel="host">
+        <p class="sync-desc">Start hosting, then enter this code on the other device.</p>
+        <div class="sync-code" id="sync-host-code">— — — — —</div>
+        <p class="sync-status" id="sync-host-status"></p>
+        <button type="button" class="btn btn-primary" id="sync-host-btn">Start hosting</button>
+      </div>
+
+      <div class="sync-panel" data-sync-panel="join" hidden>
+        <label class="field-label-sm" for="sync-join-code">Meeting code</label>
+        <input type="text" id="sync-join-code" class="role-name-input sync-join-input" maxlength="5" autocapitalize="characters" autocomplete="off" placeholder="e.g. K7QJ2">
+        <p class="sync-status" id="sync-join-status"></p>
+        <button type="button" class="btn btn-primary" id="sync-join-btn">Join as viewer</button>
+      </div>
+
+      <div class="confirm-actions">
+        <button type="button" class="btn btn-secondary" id="sync-disconnect-btn" hidden>Disconnect</button>
+        <button type="button" class="btn btn-secondary" id="sync-close-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div id="confirm-dialog" class="confirm-overlay" hidden>
     <div class="confirm-box" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
       <p id="confirm-title" class="confirm-title"></p>
@@ -169,5 +283,6 @@
 
   <script src="audio.js"></script>
   <script src="app.js"></script>
+  <script type="module" src="sync.js"></script>
 </body>
 </html>

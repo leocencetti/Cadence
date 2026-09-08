@@ -1,0 +1,183 @@
+/* ============================================================
+   Cadence — multi-device sync (prototype)
+
+   Peer-to-peer via Trystero (vendored, torrent-tracker signaling strategy
+   — see vendor/trystero/VENDORED.md). No backend of our own: the only
+   network dependencies are Trystero's default public WebTorrent trackers
+   (signaling/rendezvous) and the default STUN servers baked into
+   vendor/trystero/core/peer.mjs (Google + Cloudflare's public STUN, no
+   TURN). That combination reliably finds a direct path between two
+   devices on the same LAN — the expected case for this app — but has no
+   relay fallback, so it can fail on a restrictive/symmetric-NAT network.
+
+   Exactly one controller per room; every other peer is a view-only
+   viewer. The controller is whoever's claim to the room goes
+   unchallenged: on joining, a would-be controller broadcasts a "claim";
+   any peer that already believes itself to be the controller answers
+   with a "claimDenied" naming itself. If no denial arrives within
+   CLAIM_WINDOW_MS, the claim stands. This also lets a viewer take over
+   after the controller discononnects (room.onPeerLeave clears the known
+   controller, re-enabling a fresh claim).
+   ============================================================ */
+
+import { joinRoom, selfId } from "./vendor/trystero/torrent.mjs";
+
+const APP_ID = "cadence-standup-v1";
+const CLAIM_WINDOW_MS = 900;
+const ROOM_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; // no 0/O/1/I
+const ROOM_CODE_LENGTH = 5;
+
+let room = null;
+let roomId = null;
+let role = null; // "controller" | "viewer" | null
+let controllerPeerId = null; // known controller's Trystero peer id, once settled
+let latestState = null; // last {config, runtime} the controller broadcast
+let actions = null; // { sendState, sendClaim, sendClaimDenied }
+
+let onStateReceived = null;
+let onControllerLost = null;
+let onPeerCountChange = null;
+let onBecameController = null;
+
+function generateRoomCode() {
+  let code = "";
+  for (let i = 0; i < ROOM_CODE_LENGTH; i++) {
+    code += ROOM_CODE_ALPHABET[Math.floor(Math.random() * ROOM_CODE_ALPHABET.length)];
+  }
+  return code;
+}
+
+function peerCount() {
+  return room ? Object.keys(room.getPeers()).length : 0;
+}
+
+function wireActions() {
+  const stateAction = room.makeAction("state");
+  const claimAction = room.makeAction("claim");
+  const claimDeniedAction = room.makeAction("claimDenied");
+
+  stateAction.onMessage = (payload) => {
+    if (role === "controller") return; // we are the source of truth, ignore echoes
+    latestState = payload;
+    if (onStateReceived) onStateReceived(payload);
+  };
+
+  claimAction.onMessage = (_payload, meta) => {
+    if (role === "controller") {
+      claimDeniedAction.send({ controllerId: selfId }, meta.peerId);
+    }
+  };
+
+  claimDeniedAction.onMessage = (payload) => {
+    if (payload.controllerId !== selfId) {
+      controllerPeerId = payload.controllerId;
+    }
+  };
+
+  // onPeerJoin/onPeerLeave are property setters on the room object, not
+  // methods to call — assigning (rather than invoking) is the real API.
+  room.onPeerJoin = (peerId) => {
+    if (role === "controller") {
+      // A newcomer might also be trying to claim controller at this exact
+      // moment (e.g. two devices both tapped "Host" for the same code) —
+      // tell them immediately rather than waiting for their claim to land.
+      claimDeniedAction.send({ controllerId: selfId }, peerId);
+      if (latestState) stateAction.send(latestState, peerId);
+    }
+    if (onPeerCountChange) onPeerCountChange(peerCount());
+  };
+
+  room.onPeerLeave = (peerId) => {
+    if (peerId === controllerPeerId) {
+      controllerPeerId = null;
+      if (role === "viewer" && onControllerLost) onControllerLost();
+    }
+    if (onPeerCountChange) onPeerCountChange(peerCount());
+  };
+
+  return { stateAction, claimAction, claimDeniedAction };
+}
+
+// Broadcasts a claim to become controller and waits out CLAIM_WINDOW_MS for
+// a denial. Resolves true if the claim stood (or no one else is in the
+// room), false if another controller answered first.
+function claimController() {
+  return new Promise((resolve) => {
+    controllerPeerId = null;
+    actions.claimAction.send({});
+    setTimeout(() => {
+      resolve(controllerPeerId === null);
+    }, CLAIM_WINDOW_MS);
+  });
+}
+
+async function connect(code) {
+  if (room) leave();
+  roomId = code;
+  room = joinRoom({ appId: APP_ID }, code);
+  actions = wireActions();
+}
+
+async function hostMeeting(code) {
+  await connect(code);
+  const won = await claimController();
+  role = won ? "controller" : "viewer";
+  if (won && onBecameController) onBecameController();
+  return role;
+}
+
+async function joinMeeting(code) {
+  await connect(code);
+  role = "viewer";
+  return role;
+}
+
+// Lets a viewer retry the claim — the normal path after the controller
+// disconnects (onControllerLost fires), so the meeting can continue on
+// whichever device picks it up first.
+async function tryBecomeController() {
+  if (!room || role === "controller") return role;
+  const won = await claimController();
+  if (won) {
+    role = "controller";
+    if (onBecameController) onBecameController();
+  }
+  return role;
+}
+
+function broadcastState(config, runtime) {
+  if (!room || role !== "controller") return;
+  latestState = { config, runtime };
+  actions.stateAction.send(latestState);
+}
+
+function leave() {
+  if (room) room.leave();
+  room = null;
+  roomId = null;
+  role = null;
+  controllerPeerId = null;
+  latestState = null;
+  actions = null;
+}
+
+window.CadenceSync = {
+  generateRoomCode,
+  hostMeeting,
+  joinMeeting,
+  tryBecomeController,
+  broadcastState,
+  leave,
+  isConnected: () => !!room,
+  getRole: () => role,
+  getRoomId: () => roomId,
+  getPeerCount: peerCount,
+  get onStateReceived() { return onStateReceived; },
+  set onStateReceived(cb) { onStateReceived = cb; },
+  get onControllerLost() { return onControllerLost; },
+  set onControllerLost(cb) { onControllerLost = cb; },
+  get onPeerCountChange() { return onPeerCountChange; },
+  set onPeerCountChange(cb) { onPeerCountChange = cb; },
+  get onBecameController() { return onBecameController; },
+  set onBecameController(cb) { onBecameController = cb; }
+};
