@@ -17,6 +17,11 @@
   --text-on-dark-fill: #ffffff;
   --border-subtle: #dde1e7;
 
+  /* Fixed regardless of theme — the active role card always uses this
+     dark surface (see the .role-card.is-active comment in the card
+     section for why), it just happens to equal dark mode's own surface. */
+  --active-card-bg: #262a33;
+
   --accent: #4f6df5;
   --accent-rgb: 79, 109, 245;
   --accent-text: #ffffff;
@@ -175,10 +180,11 @@ button {
   background: var(--surface-2);
   color: var(--text);
 }
-.btn-ghost-danger {
-  background: transparent;
-  color: var(--danger);
-  border: 1px solid var(--danger);
+.btn-danger {
+  /* Solid, not transparent/outline — a see-through button looked odd
+     against the pace background wash (§5.4's green/red ambient tint). */
+  background: var(--danger);
+  color: var(--text-on-dark-fill);
 }
 .btn-large {
   width: 100%;
@@ -625,9 +631,16 @@ button {
    scale — only the outer glow layer pulses (size/opacity), so the
    "alive" cue doesn't rely on the card's footprint changing size. Idle
    siblings dim while any turn is running so the active card reads
-   clearly against them. */
+   clearly against them.
+
+   The card switches to a fixed dark surface (--active-card-bg, the same
+   tone dark mode already uses) regardless of theme, so the live text
+   below always starts on a background dark enough for white-on-dark-halo
+   to read — light mode's plain card surface used to be too light for
+   that same trick to work before the fill visually reached the text. */
 .role-card.is-active {
   --live-rgb: var(--accent-rgb);
+  background: var(--active-card-bg);
   transform: scale(1.04);
   animation: glow-pulse 1s ease-in-out infinite;
 }
@@ -643,24 +656,14 @@ button {
   }
 }
 
-/* A solid dark chip behind the live text guarantees contrast no matter
-   what's directly behind it — the plain card surface early in a turn,
-   or any point along the fill's green/yellow/orange/red ramp once it
-   rises — without needing to track the fill's exact color or height. */
+/* White text with a dark halo (the trick captions use to stay legible on
+   an arbitrary video frame) reads on every hue along the fill's green ->
+   yellow -> orange -> red ramp, and on the dark resting card above. */
 .role-card.is-active .role-card-name,
-.role-card.is-active .role-card-subtitle {
-  display: inline-block;
-  width: fit-content;
-  color: var(--text-on-dark-fill);
-  background: rgba(0, 0, 0, 0.55);
-  padding: 1px 7px;
-  border-radius: 6px;
-}
+.role-card.is-active .role-card-subtitle,
 .role-card.is-active .role-card-overflow-label {
   color: var(--text-on-dark-fill);
-  background: rgba(0, 0, 0, 0.55);
-  padding: 1px 7px;
-  border-radius: 6px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85), 0 0 6px rgba(0, 0, 0, 0.55);
 }
 
 /* Exceeding allotment */
