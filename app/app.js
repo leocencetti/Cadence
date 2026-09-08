@@ -9,7 +9,6 @@
   var RUNTIME_KEY = "cadence.runtime.v1";
   var THEME_KEY = "cadence.theme.v1";
 
-  var TURN_WARNING_FRACTION = 0.8; // last ~20% of allotment (§5.6)
   var TURN_OVERFLOW_CAP_FRACTION = 1.3; // fill never visually exceeds ~130% (§5.5)
   var AUTO_FAN_MS = 900;
   var SETTLE_MS = 320;
@@ -51,6 +50,30 @@
   function ghostCountFor(remaining) {
     // 1 remaining => 0 ghosts, 2 => 1, 3+ => 2 (capped) — §5.3.
     return clamp(remaining - 1, 0, 2);
+  }
+
+  function hslToRgb(h, s, l) {
+    var c = (1 - Math.abs(2 * l - 1)) * s;
+    var hp = h / 60;
+    var x = c * (1 - Math.abs(hp % 2 - 1));
+    var r1 = 0, g1 = 0, b1 = 0;
+    if (hp < 1) { r1 = c; g1 = x; }
+    else if (hp < 2) { r1 = x; g1 = c; }
+    else if (hp < 3) { g1 = c; b1 = x; }
+    else if (hp < 4) { g1 = x; b1 = c; }
+    else if (hp < 5) { r1 = x; b1 = c; }
+    else { r1 = c; b1 = x; }
+    var m = l - c / 2;
+    return [Math.round((r1 + m) * 255), Math.round((g1 + m) * 255), Math.round((b1 + m) * 255)];
+  }
+
+  // Continuous green -> red ramp as a turn progresses (0 at start, capped
+  // fully red once at/over the allotment) instead of discrete stages, so
+  // the fill and its glow read as one smooth "temperature" rather than a
+  // hard flip at fixed thresholds.
+  function turnColorForFraction(fraction) {
+    var t = clamp(fraction, 0, 1);
+    return hslToRgb(142 * (1 - t), 0.72, 0.46);
   }
 
   function spawnRipple(card) {
@@ -447,7 +470,7 @@
 
       card.addEventListener("click", function () { handleCardTap(role.id); });
 
-      cardRefs[role.id] = { wrap: wrap, card: card, badge: badge, fill: fill, overflow: overflow, subtitle: subtitleEl };
+      cardRefs[role.id] = { wrap: wrap, card: card, badge: badge, fill: fill, overflow: overflow, name: nameEl, subtitle: subtitleEl };
     });
   }
 
@@ -544,27 +567,33 @@
 
   // ---------- Timer / pace loop ----------
 
-  function expectedElapsedForProgress() {
+  function expectedElapsedForProgress(nowMs) {
     // Open question §10.1: rather than compare raw wall-clock elapsed to
     // the total budget (which can never disagree with itself), pace is
     // computed against how much time the roles *actually used* would add
     // up to if everyone took exactly their allotment — this is the only
     // definition that yields a distinct "ahead/behind" signal without
-    // requiring a full per-turn schedule. A turn only counts once it has
-    // been stopped (partial credit for an in-progress turn is deliberately
-    // skipped to keep this simple, per the doc's "don't over-engineer").
+    // requiring a full per-turn schedule. Completed turns count their full
+    // allotment; the in-progress turn counts its elapsed time capped at its
+    // own allotment, so the meeting reads as "on pace" for as long as the
+    // current speaker is within their own time, only going "behind" once
+    // they (or the meeting as a whole) actually run over.
     var total = 0;
     config.roles.forEach(function (role) {
       var state = runtime.roles[role.id];
       var used = role.count - state.remaining;
       total += used * role.secondsPerPerson;
     });
+    if (runtime.activeTurn) {
+      var turnElapsed = (nowMs - runtime.activeTurn.startedAt) / 1000;
+      total += Math.min(turnElapsed, runtime.activeTurn.allowanceSeconds);
+    }
     return total;
   }
 
-  function updatePaceAndTint(elapsedSeconds) {
+  function updatePaceAndTint(nowMs, elapsedSeconds) {
     var budget = config.meetingBudgetSeconds;
-    var expected = expectedElapsedForProgress();
+    var expected = expectedElapsedForProgress(nowMs);
     var delta = expected - elapsedSeconds; // positive = ahead, negative = behind
 
     var fillPct = clamp((elapsedSeconds / budget) * 100, 0, 100);
@@ -621,9 +650,11 @@
       refs.wrap.dataset.ghosts = String(ghostCountFor(state.remaining));
 
       if (!isActive) {
-        refs.card.classList.remove("is-active", "is-warning", "is-danger");
+        refs.card.classList.remove("is-active", "is-danger");
         refs.card.classList.toggle("is-dimmed", hasActiveTurn && state.remaining > 0);
         refs.fill.style.height = "0%";
+        refs.fill.style.backgroundColor = "";
+        refs.card.style.removeProperty("--live-rgb");
         refs.subtitle.textContent = formatAllowance(role.secondsPerPerson);
         return;
       }
@@ -635,12 +666,15 @@
       var fraction = turnElapsed / allowance;
 
       refs.card.classList.add("is-active");
-      refs.card.classList.toggle("is-warning", fraction >= TURN_WARNING_FRACTION && fraction < 1);
       var isDanger = fraction >= 1;
       refs.card.classList.toggle("is-danger", isDanger);
 
       var fillPct = clamp(fraction * 100, 0, TURN_OVERFLOW_CAP_FRACTION * 100);
       refs.fill.style.height = fillPct + "%";
+
+      var liveRgb = turnColorForFraction(fraction).join(", ");
+      refs.fill.style.backgroundColor = "rgb(" + liveRgb + ")";
+      refs.card.style.setProperty("--live-rgb", liveRgb);
 
       if (isDanger) {
         var overflowSeconds = Math.round(turnElapsed - allowance);
@@ -663,7 +697,7 @@
     var nowMs = Date.now();
     var elapsedSeconds = (nowMs - runtime.meetingStartedAt) / 1000;
 
-    updatePaceAndTint(elapsedSeconds);
+    updatePaceAndTint(nowMs, elapsedSeconds);
     updateBottomBar(elapsedSeconds);
     updateRoleCards(nowMs);
     updateAllDoneBanner();
