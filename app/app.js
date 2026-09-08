@@ -255,10 +255,11 @@
     viewerStatBudget: document.getElementById("viewer-stat-budget"),
     viewerAlertsBtn: document.getElementById("viewer-alerts-btn"),
     viewerLeaveBtn: document.getElementById("viewer-leave-btn"),
-    viewerAlertsDialog: document.getElementById("viewer-alerts-dialog"),
-    viewerAlertsCloseBtn: document.getElementById("viewer-alerts-close-btn"),
-    viewerSoundToggle: document.getElementById("viewer-sound-toggle"),
-    viewerVibrationToggle: document.getElementById("viewer-vibration-toggle")
+    alertsDialog: document.getElementById("alerts-dialog"),
+    alertsDialogHint: document.getElementById("alerts-dialog-hint"),
+    alertsDialogCloseBtn: document.getElementById("alerts-dialog-close-btn"),
+    alertsSoundToggle: document.getElementById("alerts-sound-toggle"),
+    alertsVibrationToggle: document.getElementById("alerts-vibration-toggle")
   };
 
   // ---------- Confirm dialog (reusable) ----------
@@ -321,39 +322,45 @@
   function initAlertToggles() {
     el.soundToggle.checked = alertPrefs.sound;
     el.vibrationToggle.checked = alertPrefs.vibration;
-    el.viewerSoundToggle.checked = alertPrefs.sound;
-    el.viewerVibrationToggle.checked = alertPrefs.vibration;
+    el.alertsSoundToggle.checked = alertPrefs.sound;
+    el.alertsVibrationToggle.checked = alertPrefs.vibration;
   }
 
   // Sound/vibration are one shared, per-device preference with two entry
-  // points (the setup screen's Alerts section, and the viewer screen's
-  // alert settings) — each toggle keeps its twin in sync.
+  // points (the setup screen's inline Alerts section, and the popup dialog
+  // used from both the active screen's settings button and the viewer
+  // screen) — each toggle keeps its twin in sync.
   el.soundToggle.addEventListener("change", function () {
     alertPrefs.sound = el.soundToggle.checked;
-    el.viewerSoundToggle.checked = alertPrefs.sound;
+    el.alertsSoundToggle.checked = alertPrefs.sound;
     saveAlertPrefs(alertPrefs);
   });
   el.vibrationToggle.addEventListener("change", function () {
     alertPrefs.vibration = el.vibrationToggle.checked;
-    el.viewerVibrationToggle.checked = alertPrefs.vibration;
+    el.alertsVibrationToggle.checked = alertPrefs.vibration;
     saveAlertPrefs(alertPrefs);
   });
-  el.viewerSoundToggle.addEventListener("change", function () {
-    alertPrefs.sound = el.viewerSoundToggle.checked;
+  el.alertsSoundToggle.addEventListener("change", function () {
+    alertPrefs.sound = el.alertsSoundToggle.checked;
     el.soundToggle.checked = alertPrefs.sound;
     saveAlertPrefs(alertPrefs);
   });
-  el.viewerVibrationToggle.addEventListener("change", function () {
-    alertPrefs.vibration = el.viewerVibrationToggle.checked;
+  el.alertsVibrationToggle.addEventListener("change", function () {
+    alertPrefs.vibration = el.alertsVibrationToggle.checked;
     el.vibrationToggle.checked = alertPrefs.vibration;
     saveAlertPrefs(alertPrefs);
   });
 
+  function openAlertsDialog(showHint) {
+    el.alertsDialogHint.hidden = !showHint;
+    el.alertsDialog.hidden = false;
+  }
+
   el.viewerAlertsBtn.addEventListener("click", function () {
-    el.viewerAlertsDialog.hidden = false;
+    openAlertsDialog(false);
   });
-  el.viewerAlertsCloseBtn.addEventListener("click", function () {
-    el.viewerAlertsDialog.hidden = true;
+  el.alertsDialogCloseBtn.addEventListener("click", function () {
+    el.alertsDialog.hidden = true;
   });
 
   // ---------- Setup screen ----------
@@ -660,16 +667,11 @@
 
   // ---------- Settings / end meeting ----------
 
+  // Mid-meeting, "settings" only offers the alert toggles (roles/times are
+  // locked once the meeting starts, per §9) — ending the meeting via the
+  // dedicated button below is the only way to reach the full setup form.
   el.settingsBtn.addEventListener("click", function () {
-    if (runtime && runtime.activeTurn) {
-      showConfirm("A turn is in progress. Leaving settings will end the current meeting. Continue?").then(function (ok) {
-        if (ok) endMeeting();
-      });
-    } else if (runtime) {
-      showConfirm("Editing settings will end the current meeting. Continue?").then(function (ok) {
-        if (ok) endMeeting();
-      });
-    }
+    openAlertsDialog(true);
   });
 
   el.endMeetingBtn.addEventListener("click", function () {
@@ -879,6 +881,14 @@
   var viewerRafHandle = null;
   var viewerAlarmPlaying = false;
   var viewerEverConnected = false;
+  var viewerLastTurnKey = null; // roleId@startedAt of the turn currently reflected in the alarm state
+
+  function stopViewerAlarm() {
+    if (viewerAlarmPlaying && window.CadenceAudio) {
+      window.CadenceAudio.stopAlarm();
+      viewerAlarmPlaying = false;
+    }
+  }
 
   function updateViewerSpotlight(nowMs) {
     var card = el.viewerSpotlightCard;
@@ -898,11 +908,21 @@
       el.viewerSpotlightName.textContent = totalRemaining === 0 ? "All done" : "No one is speaking";
       el.viewerSpotlightSubtitle.textContent = "";
       document.title = "Cadence — Viewer";
-      if (viewerAlarmPlaying && window.CadenceAudio) {
-        window.CadenceAudio.stopAlarm();
-        viewerAlarmPlaying = false;
-      }
+      viewerLastTurnKey = null;
+      stopViewerAlarm();
       return;
+    }
+
+    // A viewer only ever sees discrete state snapshots (no "turn stopped"
+    // event of its own to react to), so a switch straight from one active
+    // turn to another — skipping the momentary null in between — has to be
+    // detected here by the turn's identity changing, not inferred from
+    // rendering that intermediate state (which this render loop may never
+    // actually observe if the next update lands first).
+    var turnKey = runtime.activeTurn.roleId + "@" + runtime.activeTurn.startedAt;
+    if (turnKey !== viewerLastTurnKey) {
+      stopViewerAlarm();
+      viewerLastTurnKey = turnKey;
     }
 
     var activeRole = config.roles.filter(function (r) { return r.id === runtime.activeTurn.roleId; })[0];
@@ -955,6 +975,8 @@
     el.viewerStatRemaining.textContent = "0:00";
     el.viewerStatBudget.textContent = "0:00";
     el.tintOverlay.style.backgroundColor = "transparent";
+    viewerLastTurnKey = null;
+    stopViewerAlarm();
   }
 
   function viewerTick() {
@@ -982,10 +1004,7 @@
   function stopViewerTicking() {
     if (viewerRafHandle) cancelAnimationFrame(viewerRafHandle);
     viewerRafHandle = null;
-    if (viewerAlarmPlaying && window.CadenceAudio) {
-      window.CadenceAudio.stopAlarm();
-      viewerAlarmPlaying = false;
-    }
+    stopViewerAlarm();
   }
 
   function showViewerScreen() {
@@ -1015,7 +1034,20 @@
     }
   }
 
+  // Keeps the two primary actions (Start hosting / Join as viewer) and the
+  // shared Disconnect/Close pair on one row, showing only what's relevant
+  // to the active tab and current connection state — at most two buttons
+  // are ever visible at once.
+  function updateSyncActionButtons() {
+    var activeTab = document.querySelector(".sync-tab.is-active").dataset.syncTab;
+    var isHosting = window.CadenceSync && window.CadenceSync.getRole() === "controller";
+    el.syncHostBtn.hidden = activeTab !== "host" || isHosting;
+    el.syncJoinBtn.hidden = activeTab !== "join";
+    el.syncDisconnectBtn.hidden = !isHosting;
+  }
+
   el.syncOpenBtn.addEventListener("click", function () {
+    updateSyncActionButtons();
     el.syncDialog.hidden = false;
   });
   el.syncCloseBtn.addEventListener("click", function () {
@@ -1031,6 +1063,7 @@
       el.syncPanels.forEach(function (p) {
         p.hidden = p.dataset.syncPanel !== tab.dataset.syncTab;
       });
+      updateSyncActionButtons();
     });
   });
 
@@ -1043,8 +1076,7 @@
       el.syncHostBtn.disabled = false;
       if (role === "controller") {
         setSyncStatus(el.syncHostStatus, "Hosting — waiting for viewers…", "is-ok");
-        el.syncHostBtn.hidden = true;
-        el.syncDisconnectBtn.hidden = false;
+        updateSyncActionButtons();
         updateSyncBadge();
       } else {
         window.CadenceSync.leave();
@@ -1079,10 +1111,9 @@
 
   el.syncDisconnectBtn.addEventListener("click", function () {
     window.CadenceSync.leave();
-    el.syncHostBtn.hidden = false;
-    el.syncDisconnectBtn.hidden = true;
     el.syncHostCode.textContent = "— — — — —";
     setSyncStatus(el.syncHostStatus, "");
+    updateSyncActionButtons();
     updateSyncBadge();
   });
 

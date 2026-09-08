@@ -439,7 +439,8 @@ button {
    Active screen
    ============================================================ */
 
-#active-screen {
+#active-screen,
+#viewer-screen {
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 16px 32px;
@@ -814,13 +815,14 @@ button {
 }
 .role-card.viewer-spotlight {
   width: 100%;
-  max-width: 520px;
-  min-height: 240px;
+  max-width: 640px;
+  min-height: 280px;
   cursor: default;
 }
 .viewer-spotlight .role-card-content { align-items: center; justify-content: center; text-align: center; }
-.viewer-spotlight-name { font-size: 1.8rem; }
-.viewer-spotlight-subtitle { font-size: 1.2rem; }
+.viewer-spotlight-name { font-size: 2.6rem; }
+.viewer-spotlight-subtitle { font-size: 1.6rem; }
+.viewer-spotlight .role-card-overflow-label { font-size: 1.1rem; top: 14px; right: 16px; }
 .role-card.viewer-spotlight.is-idle .role-card-name,
 .role-card.viewer-spotlight.is-idle .role-card-subtitle {
   color: var(--text-muted);
@@ -864,5 +866,7 @@ button {
   .stat-value { font-size: 1.7rem; }
   .stat-label { font-size: 0.9rem; }
   .pace-bar { height: 14px; }
-  #active-screen { max-width: 1400px; }
+  #active-screen, #viewer-screen { max-width: 1400px; }
+  .viewer-spotlight-name { font-size: 3.4rem; }
+  .viewer-spotlight-subtitle { font-size: 2rem; }
 }

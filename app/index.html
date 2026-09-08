@@ -186,25 +186,26 @@
     </footer>
   </section>
 
-  <div id="viewer-alerts-dialog" class="confirm-overlay" hidden>
-    <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="viewer-alerts-title">
-      <p id="viewer-alerts-title" class="confirm-title">Alerts (this device)</p>
+  <div id="alerts-dialog" class="confirm-overlay" hidden>
+    <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="alerts-dialog-title">
+      <p id="alerts-dialog-title" class="confirm-title">Alerts (this device)</p>
       <label class="toggle-row">
         <span class="toggle-row-label"><i class="ti ti-volume-2" aria-hidden="true"></i> Sound</span>
         <span class="switch">
-          <input type="checkbox" id="viewer-sound-toggle" checked>
+          <input type="checkbox" id="alerts-sound-toggle" checked>
           <span class="switch-track"></span>
         </span>
       </label>
       <label class="toggle-row">
         <span class="toggle-row-label"><i class="ti ti-device-mobile-vibrate" aria-hidden="true"></i> Vibration</span>
         <span class="switch">
-          <input type="checkbox" id="viewer-vibration-toggle" checked>
+          <input type="checkbox" id="alerts-vibration-toggle" checked>
           <span class="switch-track"></span>
         </span>
       </label>
+      <p class="sync-desc" id="alerts-dialog-hint" hidden>To change roles or times, end the meeting first.</p>
       <div class="confirm-actions">
-        <button type="button" class="btn btn-primary" id="viewer-alerts-close-btn">Done</button>
+        <button type="button" class="btn btn-primary" id="alerts-dialog-close-btn">Done</button>
       </div>
     </div>
   </div>
@@ -222,17 +223,17 @@
         <p class="sync-desc">Start hosting, then enter this code on the other device.</p>
         <div class="sync-code" id="sync-host-code">— — — — —</div>
         <p class="sync-status" id="sync-host-status"></p>
-        <button type="button" class="btn btn-primary" id="sync-host-btn">Start hosting</button>
       </div>
 
       <div class="sync-panel" data-sync-panel="join" hidden>
         <label class="field-label-sm" for="sync-join-code">Meeting code</label>
         <input type="text" id="sync-join-code" class="role-name-input sync-join-input" maxlength="5" autocapitalize="characters" autocomplete="off" placeholder="e.g. K7QJ2">
         <p class="sync-status" id="sync-join-status"></p>
-        <button type="button" class="btn btn-primary" id="sync-join-btn">Join as viewer</button>
       </div>
 
       <div class="confirm-actions">
+        <button type="button" class="btn btn-primary" id="sync-host-btn">Start hosting</button>
+        <button type="button" class="btn btn-primary" id="sync-join-btn" hidden>Join as viewer</button>
         <button type="button" class="btn btn-secondary" id="sync-disconnect-btn" hidden>Disconnect</button>
         <button type="button" class="btn btn-secondary" id="sync-close-btn">Close</button>
       </div>
