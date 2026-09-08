@@ -24,11 +24,8 @@
   --shadow-resting: 0 1px 2px rgba(20, 22, 30, 0.06), 0 6px 16px -6px rgba(20, 22, 30, 0.14);
   --shadow-elevated: 0 4px 10px rgba(20, 22, 30, 0.12), 0 14px 30px -10px rgba(20, 22, 30, 0.24);
 
-  --warning: #d99a1f;
   --warning-bg: #f3b53a;
   --danger: #e5484d;
-  --danger-fill: #e5484d;
-  --success: #1f9d55;
 
   --pace-good: #2fa562;
   --pace-bad: #e5484d;
@@ -62,11 +59,8 @@
     --shadow-resting: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 16px -6px rgba(0, 0, 0, 0.55);
     --shadow-elevated: 0 4px 10px rgba(0, 0, 0, 0.45), 0 14px 30px -10px rgba(0, 0, 0, 0.6);
 
-    --warning: #e0ac3f;
     --warning-bg: #caa13c;
     --danger: #f16368;
-    --danger-fill: #d34d52;
-    --success: #3cb975;
 
     --pace-good: #3cb975;
     --pace-bad: #f16368;
@@ -95,11 +89,8 @@
   --shadow-resting: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 16px -6px rgba(0, 0, 0, 0.55);
   --shadow-elevated: 0 4px 10px rgba(0, 0, 0, 0.45), 0 14px 30px -10px rgba(0, 0, 0, 0.6);
 
-  --warning: #e0ac3f;
   --warning-bg: #caa13c;
   --danger: #f16368;
-  --danger-fill: #d34d52;
-  --success: #3cb975;
 
   --pace-good: #3cb975;
   --pace-bad: #f16368;
@@ -253,6 +244,7 @@ button {
   box-shadow: var(--shadow-resting);
   border-radius: var(--radius-control);
   padding: 6px 12px;
+  min-height: 44px;
 }
 .duration-num {
   width: 64px;
@@ -343,7 +335,8 @@ button {
   gap: 4px;
   background: var(--surface-2);
   border-radius: var(--radius-control);
-  padding: 4px;
+  padding: 6px 4px;
+  min-height: 44px;
 }
 .stepper-btn {
   width: 32px;
@@ -559,36 +552,47 @@ button {
 .role-card.is-exhausted { opacity: 0.4; cursor: default; }
 .role-card.is-exhausted:hover { transform: none; box-shadow: var(--shadow-resting); }
 
-/* Active / currently speaking — a glow ring makes the active card
-   readable even when its fill is still tiny (a long allotment can
-   take a while to visibly rise). Idle siblings dim while any turn is
-   running so the active card reads clearly against them. */
+/* Active / currently speaking. The glow ring shares the fill's own live
+   color (--live-rgb, set per-frame by app.js as the turn's green->red
+   ramp progresses) so the two never clash, and both "breathe" together
+   via a slow pulse so the active card stays obvious even when the fill
+   itself is still small. Idle siblings dim while any turn is running so
+   the active card reads clearly against them. */
 .role-card.is-active {
-  box-shadow: 0 0 0 3px var(--accent), 0 0 22px 6px rgba(var(--accent-rgb), 0.55), var(--shadow-elevated);
-  transform: scale(1.04);
+  --live-rgb: var(--accent-rgb);
+  box-shadow: 0 0 0 3px rgb(var(--live-rgb)), 0 0 22px 6px rgba(var(--live-rgb), 0.55), var(--shadow-elevated);
+  animation: card-breathe 1s ease-in-out infinite;
 }
 .role-card.is-active .role-card-badge { opacity: 0; pointer-events: none; }
 .role-card.is-dimmed { opacity: 0.5; }
 
-/* Approaching allotment (last ~20%) */
-.role-card.is-warning .role-card-fill { background: var(--warning); }
-.role-card.is-warning .role-card-name,
-.role-card.is-warning .role-card-subtitle { color: var(--text-on-dark-fill); }
+@keyframes card-breathe {
+  0%, 100% { transform: scale(1.04); }
+  50% { transform: scale(1.07); }
+}
+
+.role-card.is-active .role-card-fill {
+  transform-origin: bottom;
+  animation: fill-breathe 1s ease-in-out infinite;
+}
+@keyframes fill-breathe {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.035); }
+}
+
+/* White text with a dark halo reads on every hue along the fill's green
+   -> yellow -> red ramp (the same trick captions use to stay legible on
+   an arbitrary video frame), so it doesn't need to track the fill's
+   exact color or the card's fill height to stay readable. */
+.role-card.is-active .role-card-name,
+.role-card.is-active .role-card-subtitle,
+.role-card.is-active .role-card-overflow-label {
+  color: var(--text-on-dark-fill);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85), 0 0 6px rgba(0, 0, 0, 0.55);
+}
 
 /* Exceeding allotment */
-.role-card.is-danger .role-card-fill {
-  background: var(--danger-fill);
-  height: 130% !important;
-}
-.role-card.is-danger .role-card-name,
-.role-card.is-danger .role-card-subtitle { color: var(--text-on-dark-fill); }
 .role-card.is-danger .role-card-overflow-label { display: block; }
-.role-card.is-danger { animation: danger-pulse 1s ease-in-out infinite; }
-
-@keyframes danger-pulse {
-  0%, 100% { box-shadow: var(--shadow-elevated); }
-  50% { box-shadow: 0 0 0 4px rgba(var(--tint-red-rgb), 0.5), var(--shadow-elevated); }
-}
 
 .role-card.is-settling { transform: scale(0.88); }
 
@@ -616,7 +620,7 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .role-card, .ghost, .pace-bar-fill, .pace-bar-tick { transition: none !important; animation: none !important; }
+  .role-card, .role-card-fill, .ghost, .pace-bar-fill, .pace-bar-tick { transition: none !important; animation: none !important; }
   .tap-ripple { display: none; }
 }
 
