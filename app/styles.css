@@ -145,7 +145,12 @@ button {
 }
 
 .screen {
+  /* svh (smallest viewport, toolbars expanded) avoids the classic mobile
+     bug where 100vh (largest viewport, toolbars collapsed) renders taller
+     than what's actually visible on load, making the page falsely
+     scrollable. Browsers without svh support just keep the vh value. */
   min-height: 100vh;
+  min-height: 100svh;
 }
 
 /* ---------- Buttons ---------- */
@@ -208,8 +213,9 @@ button {
 .setup-wrap {
   max-width: 640px;
   margin: 0 auto;
-  padding: 32px 20px 64px;
+  padding: 4px 20px 64px;
 }
+.top-bar-setup { padding: 8px 4px 0; }
 
 .setup-header {
   text-align: center;
@@ -665,7 +671,7 @@ button {
 /* Small phone: tighten padding (role-row's own layout already reflows
    via grid-template-areas above) */
 @media (max-width: 400px) {
-  .setup-wrap { padding: 20px 14px 48px; }
+  .setup-wrap { padding: 4px 14px 48px; }
 }
 
 /* Tablet and up: widen grid, cap card width, center with margins */

@@ -137,8 +137,8 @@
     rolesError: document.getElementById("roles-error"),
     addRoleBtn: document.getElementById("add-role-btn"),
     roleRowTemplate: document.getElementById("role-row-template"),
-    themeToggleBtn: document.getElementById("theme-toggle-btn"),
-    themeToggleIcon: document.getElementById("theme-toggle-icon"),
+    themeToggleBtns: document.querySelectorAll(".theme-toggle-btn"),
+    themeToggleIcons: document.querySelectorAll(".theme-toggle-icon"),
     settingsBtn: document.getElementById("settings-btn"),
     paceBar: document.getElementById("pace-bar"),
     paceBarFill: document.getElementById("pace-bar-fill"),
@@ -191,20 +191,24 @@
     }
     var systemDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
     var effectiveDark = pref === "dark" || (pref !== "light" && systemDark);
-    el.themeToggleIcon.className = effectiveDark ? "ti ti-sun" : "ti ti-moon";
+    el.themeToggleIcons.forEach(function (icon) {
+      icon.className = "ti theme-toggle-icon " + (effectiveDark ? "ti-sun" : "ti-moon");
+    });
   }
 
   function initTheme() {
     applyTheme(loadThemePreference());
   }
 
-  el.themeToggleBtn.addEventListener("click", function () {
-    var current = loadThemePreference();
-    var systemDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-    var currentlyDark = current === "dark" || (current !== "light" && systemDark);
-    var next = currentlyDark ? "light" : "dark";
-    localStorage.setItem(THEME_KEY, next);
-    applyTheme(next);
+  el.themeToggleBtns.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var current = loadThemePreference();
+      var systemDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      var currentlyDark = current === "dark" || (current !== "light" && systemDark);
+      var next = currentlyDark ? "light" : "dark";
+      localStorage.setItem(THEME_KEY, next);
+      applyTheme(next);
+    });
   });
 
   // ---------- Setup screen ----------
