@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Cadence — Standup Timer</title>
+  <meta name="description" content="A static timer app for pacing group standup meetings.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⏱️</text></svg>">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="tint-overlay" class="tint-overlay" aria-hidden="true"></div>
+
+  <section id="setup-screen" class="screen">
+    <div class="setup-wrap">
+      <header class="setup-header">
+        <h1 class="app-title">Cadence</h1>
+        <p class="app-subtitle">Pace your standup meeting.</p>
+      </header>
+
+      <form id="setup-form" novalidate>
+        <div class="field-group">
+          <label class="field-label" id="budget-label">Total meeting time</label>
+          <div class="duration-input" role="group" aria-labelledby="budget-label">
+            <input type="number" id="budget-min" class="duration-num" min="0" max="999" step="1" inputmode="numeric" aria-label="Minutes" placeholder="0">
+            <span class="duration-unit">m</span>
+            <input type="number" id="budget-sec" class="duration-num" min="0" max="59" step="1" inputmode="numeric" aria-label="Seconds" placeholder="00">
+            <span class="duration-unit">s</span>
+          </div>
+          <p class="field-error" id="budget-error" hidden></p>
+        </div>
+
+        <div class="roles-section">
+          <div class="roles-section-header">
+            <h2 class="roles-heading">Roles</h2>
+            <button type="button" id="add-role-btn" class="btn btn-secondary">
+              <i class="ti ti-plus" aria-hidden="true"></i> Add role
+            </button>
+          </div>
+          <div id="roles-list" class="roles-list"></div>
+          <p class="field-error" id="roles-error" hidden></p>
+        </div>
+
+        <button type="submit" id="start-meeting-btn" class="btn btn-primary btn-large">
+          Start meeting
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <section id="active-screen" class="screen" hidden>
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <span class="app-title-small">Cadence</span>
+      </div>
+      <div class="top-bar-right">
+        <button type="button" id="theme-toggle-btn" class="icon-btn" aria-label="Toggle theme">
+          <i class="ti ti-moon" id="theme-toggle-icon" aria-hidden="true"></i>
+        </button>
+        <button type="button" id="settings-btn" class="icon-btn" aria-label="Settings">
+          <i class="ti ti-settings" aria-hidden="true"></i>
+        </button>
+      </div>
+    </header>
+
+    <div class="pace-bar-wrap">
+      <div class="pace-bar" id="pace-bar" role="img" aria-label="Meeting pace">
+        <div class="pace-bar-fill" id="pace-bar-fill"></div>
+        <div class="pace-bar-tick" id="pace-bar-tick"></div>
+      </div>
+      <p class="pace-label" id="pace-label">On pace</p>
+    </div>
+
+    <p id="all-done-banner" class="all-done-banner" hidden>
+      <i class="ti ti-confetti" aria-hidden="true"></i> All roles have spoken — agenda complete.
+    </p>
+
+    <main class="role-grid" id="role-grid"></main>
+
+    <footer class="bottom-bar">
+      <div class="stat">
+        <span class="stat-value" id="stat-elapsed">0:00</span>
+        <span class="stat-label">Elapsed</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="stat-remaining">0:00</span>
+        <span class="stat-label" id="stat-remaining-label">Remaining</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="stat-budget">0:00</span>
+        <span class="stat-label">Budget</span>
+      </div>
+    </footer>
+
+    <button type="button" id="end-meeting-btn" class="btn btn-ghost-danger end-meeting-btn">
+      <i class="ti ti-player-stop" aria-hidden="true"></i> End meeting
+    </button>
+  </section>
+
+  <div id="confirm-dialog" class="confirm-overlay" hidden>
+    <div class="confirm-box" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
+      <p id="confirm-title" class="confirm-title"></p>
+      <div class="confirm-actions">
+        <button type="button" id="confirm-cancel-btn" class="btn btn-secondary">Cancel</button>
+        <button type="button" id="confirm-ok-btn" class="btn btn-primary">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <template id="role-row-template">
+    <div class="role-row" data-role-row>
+      <div class="role-row-field role-row-name">
+        <label class="field-label-sm">Name</label>
+        <input type="text" class="role-name-input" placeholder="e.g. Manager" maxlength="40">
+        <p class="field-error" data-error="name" hidden></p>
+      </div>
+      <div class="role-row-field role-row-time">
+        <label class="field-label-sm">Time per person</label>
+        <div class="duration-input duration-input-sm">
+          <input type="number" class="role-time-min duration-num" min="0" max="999" step="1" inputmode="numeric" aria-label="Minutes" placeholder="0">
+          <span class="duration-unit">m</span>
+          <input type="number" class="role-time-sec duration-num" min="0" max="59" step="1" inputmode="numeric" aria-label="Seconds" placeholder="00">
+          <span class="duration-unit">s</span>
+        </div>
+        <p class="field-error" data-error="time" hidden></p>
+      </div>
+      <div class="role-row-field role-row-count">
+        <label class="field-label-sm">People</label>
+        <div class="stepper">
+          <button type="button" class="stepper-btn" data-step="-1" aria-label="Decrease people">−</button>
+          <input type="number" class="role-count-input" min="0" max="99" step="1" inputmode="numeric" value="1">
+          <button type="button" class="stepper-btn" data-step="1" aria-label="Increase people">+</button>
+        </div>
+        <p class="field-error" data-error="count" hidden></p>
+      </div>
+      <button type="button" class="icon-btn role-remove-btn" aria-label="Remove role">
+        <i class="ti ti-trash" aria-hidden="true"></i>
+      </button>
+    </div>
+  </template>
+
+  <script src="audio.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
