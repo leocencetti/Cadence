@@ -46,24 +46,32 @@
     osc.stop(startTime + duration + 0.02);
   }
 
-  function scheduleCycle() {
-    const audioCtx = ensureContext();
-    const now = audioCtx.currentTime + 0.02;
-    beep(now, 880, 0.12);
-    beep(now + 0.16, 880, 0.12);
-    if (navigator.vibrate) {
+  function scheduleCycle(playSound, playVibrate) {
+    if (playSound) {
+      const audioCtx = ensureContext();
+      const now = audioCtx.currentTime + 0.02;
+      beep(now, 880, 0.12);
+      beep(now + 0.16, 880, 0.12);
+    }
+    if (playVibrate && navigator.vibrate) {
       navigator.vibrate([120, 60, 120]);
     }
   }
 
-  function startAlarm() {
+  // options: { sound, vibrate } — each independently toggleable so a
+  // muted-sound meeting can still buzz, or vice versa.
+  function startAlarm(options) {
     if (loopTimer) return;
-    const audioCtx = ensureContext();
-    if (audioCtx.state === "suspended") {
-      audioCtx.resume();
+    const playSound = !options || options.sound !== false;
+    const playVibrate = !options || options.vibrate !== false;
+    if (playSound) {
+      const audioCtx = ensureContext();
+      if (audioCtx.state === "suspended") {
+        audioCtx.resume();
+      }
     }
-    scheduleCycle();
-    loopTimer = setInterval(scheduleCycle, 700);
+    scheduleCycle(playSound, playVibrate);
+    loopTimer = setInterval(function () { scheduleCycle(playSound, playVibrate); }, 700);
   }
 
   function stopAlarm() {

@@ -51,6 +51,24 @@
           <p class="field-error" id="roles-error" hidden></p>
         </div>
 
+        <div class="alerts-section">
+          <h2 class="roles-heading">Alerts</h2>
+          <label class="toggle-row">
+            <span class="toggle-row-label"><i class="ti ti-volume-2" aria-hidden="true"></i> Sound</span>
+            <span class="switch">
+              <input type="checkbox" id="sound-toggle" checked>
+              <span class="switch-track"></span>
+            </span>
+          </label>
+          <label class="toggle-row">
+            <span class="toggle-row-label"><i class="ti ti-device-mobile-vibrate" aria-hidden="true"></i> Vibration</span>
+            <span class="switch">
+              <input type="checkbox" id="vibration-toggle" checked>
+              <span class="switch-track"></span>
+            </span>
+          </label>
+        </div>
+
         <button type="submit" id="start-meeting-btn" class="btn btn-primary btn-large">
           Start meeting
         </button>
@@ -102,7 +120,7 @@
       </div>
     </footer>
 
-    <button type="button" id="end-meeting-btn" class="btn btn-ghost-danger end-meeting-btn">
+    <button type="button" id="end-meeting-btn" class="btn btn-danger end-meeting-btn">
       <i class="ti ti-player-stop" aria-hidden="true"></i> End meeting
     </button>
   </section>
