@@ -1,2 +1,2 @@
 # Cadence
-Stand-up Meeting pacing made easy!
+Pacing stand-up meeting pacing made easy!
