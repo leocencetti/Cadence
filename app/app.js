@@ -8,6 +8,7 @@
   var CONFIG_KEY = "cadence.config.v1";
   var RUNTIME_KEY = "cadence.runtime.v1";
   var THEME_KEY = "cadence.theme.v1";
+  var ALERTS_KEY = "cadence.alerts.v1";
 
   var TURN_OVERFLOW_CAP_FRACTION = 1.3; // fill never visually exceeds ~130% (§5.5)
   var AUTO_FAN_MS = 900;
@@ -101,11 +102,16 @@
     setTimeout(function () { ripple.remove(); }, RIPPLE_MS);
   }
 
+  function formatDurationUnits(seconds) {
+    var t = Math.max(0, Math.round(seconds));
+    if (t < 60) return t + "s";
+    var m = Math.floor(t / 60);
+    var s = t % 60;
+    return s === 0 ? m + "m" : m + "m " + s + "s";
+  }
+
   function formatAllowance(seconds) {
-    if (seconds < 60) return seconds + "s each";
-    var m = Math.floor(seconds / 60);
-    var s = seconds % 60;
-    return s === 0 ? m + "m each" : m + "m " + s + "s each";
+    return formatDurationUnits(seconds) + " each";
   }
 
   // ---------- Persistence ----------
@@ -165,6 +171,24 @@
     }
   }
 
+  function loadAlertPrefs() {
+    try {
+      var raw = localStorage.getItem(ALERTS_KEY);
+      if (!raw) return { sound: true, vibration: true };
+      var parsed = JSON.parse(raw);
+      return {
+        sound: parsed.sound !== false,
+        vibration: parsed.vibration !== false
+      };
+    } catch (e) {
+      return { sound: true, vibration: true };
+    }
+  }
+
+  function saveAlertPrefs(prefs) {
+    localStorage.setItem(ALERTS_KEY, JSON.stringify(prefs));
+  }
+
   // ---------- DOM references ----------
 
   var el = {
@@ -178,6 +202,8 @@
     rolesError: document.getElementById("roles-error"),
     addRoleBtn: document.getElementById("add-role-btn"),
     roleRowTemplate: document.getElementById("role-row-template"),
+    soundToggle: document.getElementById("sound-toggle"),
+    vibrationToggle: document.getElementById("vibration-toggle"),
     themeToggleBtns: document.querySelectorAll(".theme-toggle-btn"),
     themeToggleIcons: document.querySelectorAll(".theme-toggle-icon"),
     settingsBtn: document.getElementById("settings-btn"),
@@ -250,6 +276,24 @@
       localStorage.setItem(THEME_KEY, next);
       applyTheme(next);
     });
+  });
+
+  // ---------- Alert preferences (sound / vibration) ----------
+
+  var alertPrefs = loadAlertPrefs();
+
+  function initAlertToggles() {
+    el.soundToggle.checked = alertPrefs.sound;
+    el.vibrationToggle.checked = alertPrefs.vibration;
+  }
+
+  el.soundToggle.addEventListener("change", function () {
+    alertPrefs.sound = el.soundToggle.checked;
+    saveAlertPrefs(alertPrefs);
+  });
+  el.vibrationToggle.addEventListener("change", function () {
+    alertPrefs.vibration = el.vibrationToggle.checked;
+    saveAlertPrefs(alertPrefs);
   });
 
   // ---------- Setup screen ----------
@@ -513,7 +557,7 @@
     };
     saveRuntime(runtime);
 
-    if (navigator.vibrate) navigator.vibrate(15);
+    if (alertPrefs.vibration && navigator.vibrate) navigator.vibrate(15);
     var refs = cardRefs[roleId];
     if (refs) {
       spawnRipple(refs.card);
@@ -536,7 +580,7 @@
     runtime.activeTurn = null;
     saveRuntime(runtime);
 
-    if (navigator.vibrate) navigator.vibrate(15);
+    if (alertPrefs.vibration && navigator.vibrate) navigator.vibrate(15);
     var refs = cardRefs[roleId];
     if (refs) {
       spawnRipple(refs.card);
@@ -699,16 +743,16 @@
       refs.card.style.setProperty("--live-rgb", liveRgb);
 
       if (isDanger) {
-        var overflowSeconds = Math.round(turnElapsed - allowance);
-        refs.overflow.textContent = "+" + overflowSeconds + "s";
-        refs.subtitle.textContent = "+" + overflowSeconds + "s";
-        if (!alarmPlaying && window.CadenceAudio) {
-          window.CadenceAudio.startAlarm();
+        var overflowLabel = "+" + formatDurationUnits(turnElapsed - allowance);
+        refs.overflow.textContent = overflowLabel;
+        refs.subtitle.textContent = overflowLabel;
+        if (!alarmPlaying && window.CadenceAudio && (alertPrefs.sound || alertPrefs.vibration)) {
+          window.CadenceAudio.startAlarm({ sound: alertPrefs.sound, vibrate: alertPrefs.vibration });
           alarmPlaying = true;
         }
-        document.title = "+" + overflowSeconds + "s over — Cadence";
+        document.title = overflowLabel + " over — Cadence";
       } else {
-        refs.subtitle.textContent = Math.round(turnElapsed) + "s";
+        refs.subtitle.textContent = formatDurationUnits(turnElapsed);
         document.title = "Cadence — Standup Timer";
       }
     });
@@ -745,6 +789,7 @@
 
   function boot() {
     initTheme();
+    initAlertToggles();
     var storedRuntime = loadRuntime();
     if (storedRuntime) {
       config = loadConfig();
