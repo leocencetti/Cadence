@@ -104,7 +104,12 @@
   color-scheme: light;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+  /* Suppress the default mobile tap-highlight rectangle — our own
+     tap feedback (ripple, pop/settle, glow) replaces it. */
+  -webkit-tap-highlight-color: transparent;
+}
 
 html, body {
   margin: 0;
@@ -516,7 +521,10 @@ button {
   bottom: 0;
   height: 0%;
   background: var(--warning-bg);
-  transition: background-color 0.3s ease;
+  /* Height is only updated once per second by app.js (not every frame),
+     so this transition is what turns each update into a single eased
+     step up rather than a snap. */
+  transition: height 0.5s ease-in-out, background-color 0.3s ease;
   z-index: 0;
 }
 .role-card-overflow-label {
@@ -552,43 +560,48 @@ button {
 .role-card.is-exhausted { opacity: 0.4; cursor: default; }
 .role-card.is-exhausted:hover { transform: none; box-shadow: var(--shadow-resting); }
 
-/* Active / currently speaking. The glow ring shares the fill's own live
-   color (--live-rgb, set per-frame by app.js as the turn's green->red
-   ramp progresses) so the two never clash, and both "breathe" together
-   via a slow pulse so the active card stays obvious even when the fill
-   itself is still small. Idle siblings dim while any turn is running so
-   the active card reads clearly against them. */
+/* Active / currently speaking. The glow shares the fill's own live color
+   (--live-rgb, set per-frame by app.js as the turn's green->red ramp
+   progresses) so the two never clash. The card itself holds a fixed
+   scale — only the outer glow layer pulses (size/opacity), so the
+   "alive" cue doesn't rely on the card's footprint changing size. Idle
+   siblings dim while any turn is running so the active card reads
+   clearly against them. */
 .role-card.is-active {
   --live-rgb: var(--accent-rgb);
-  box-shadow: 0 0 0 3px rgb(var(--live-rgb)), 0 0 22px 6px rgba(var(--live-rgb), 0.55), var(--shadow-elevated);
-  animation: card-breathe 1s ease-in-out infinite;
+  transform: scale(1.04);
+  animation: glow-pulse 1s ease-in-out infinite;
 }
 .role-card.is-active .role-card-badge { opacity: 0; pointer-events: none; }
 .role-card.is-dimmed { opacity: 0.5; }
 
-@keyframes card-breathe {
-  0%, 100% { transform: scale(1.04); }
-  50% { transform: scale(1.07); }
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 3px rgb(var(--live-rgb)), 0 0 14px 3px rgba(var(--live-rgb), 0.4), var(--shadow-elevated);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgb(var(--live-rgb)), 0 0 26px 8px rgba(var(--live-rgb), 0.65), var(--shadow-elevated);
+  }
 }
 
-.role-card.is-active .role-card-fill {
-  transform-origin: bottom;
-  animation: fill-breathe 1s ease-in-out infinite;
-}
-@keyframes fill-breathe {
-  0%, 100% { transform: scaleY(1); }
-  50% { transform: scaleY(1.035); }
-}
-
-/* White text with a dark halo reads on every hue along the fill's green
-   -> yellow -> red ramp (the same trick captions use to stay legible on
-   an arbitrary video frame), so it doesn't need to track the fill's
-   exact color or the card's fill height to stay readable. */
+/* A solid dark chip behind the live text guarantees contrast no matter
+   what's directly behind it — the plain card surface early in a turn,
+   or any point along the fill's green/yellow/orange/red ramp once it
+   rises — without needing to track the fill's exact color or height. */
 .role-card.is-active .role-card-name,
-.role-card.is-active .role-card-subtitle,
+.role-card.is-active .role-card-subtitle {
+  display: inline-block;
+  width: fit-content;
+  color: var(--text-on-dark-fill);
+  background: rgba(0, 0, 0, 0.55);
+  padding: 1px 7px;
+  border-radius: 6px;
+}
 .role-card.is-active .role-card-overflow-label {
   color: var(--text-on-dark-fill);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85), 0 0 6px rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.55);
+  padding: 1px 7px;
+  border-radius: 6px;
 }
 
 /* Exceeding allotment */

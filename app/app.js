@@ -67,13 +67,31 @@
     return [Math.round((r1 + m) * 255), Math.round((g1 + m) * 255), Math.round((b1 + m) * 255)];
   }
 
-  // Continuous green -> red ramp as a turn progresses (0 at start, capped
-  // fully red once at/over the allotment) instead of discrete stages, so
-  // the fill and its glow read as one smooth "temperature" rather than a
-  // hard flip at fixed thresholds.
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  var TURN_COLOR_GREEN = { h: 142, s: 0.70, l: 0.45 };
+  var TURN_COLOR_DARK_ORANGE = { h: 28, s: 0.85, l: 0.38 };
+  var TURN_COLOR_RED = { h: 2, s: 0.75, l: 0.45 };
+
+  // Green -> dark orange over the allotment itself, red only once actually
+  // over it. An exponential-like easing (t^4) keeps the color mostly green
+  // until well past the midpoint, then swings quickly through yellow/orange
+  // to reach dark orange right at 100% — rather than a linear ramp that
+  // would already look orange while still comfortably within time.
   function turnColorForFraction(fraction) {
-    var t = clamp(fraction, 0, 1);
-    return hslToRgb(142 * (1 - t), 0.72, 0.46);
+    var stopA, stopB, t;
+    if (fraction <= 1) {
+      stopA = TURN_COLOR_GREEN;
+      stopB = TURN_COLOR_DARK_ORANGE;
+      t = Math.pow(clamp(fraction, 0, 1), 4);
+    } else {
+      stopA = TURN_COLOR_DARK_ORANGE;
+      stopB = TURN_COLOR_RED;
+      t = clamp((fraction - 1) / (TURN_OVERFLOW_CAP_FRACTION - 1), 0, 1);
+    }
+    return hslToRgb(lerp(stopA.h, stopB.h, t), lerp(stopA.s, stopB.s, t), lerp(stopA.l, stopB.l, t));
   }
 
   function spawnRipple(card) {
@@ -669,7 +687,11 @@
       var isDanger = fraction >= 1;
       refs.card.classList.toggle("is-danger", isDanger);
 
-      var fillPct = clamp(fraction * 100, 0, TURN_OVERFLOW_CAP_FRACTION * 100);
+      // Height is quantized to whole seconds (rather than every frame) so
+      // the CSS transition on .role-card-fill reads as one eased step up
+      // per second instead of a continuous, imperceptibly-smooth creep.
+      var quantizedFraction = Math.floor(turnElapsed) / allowance;
+      var fillPct = clamp(quantizedFraction * 100, 0, TURN_OVERFLOW_CAP_FRACTION * 100);
       refs.fill.style.height = fillPct + "%";
 
       var liveRgb = turnColorForFraction(fraction).join(", ");
