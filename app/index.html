@@ -223,17 +223,17 @@
         <p class="sync-desc">Start hosting, then enter this code on the other device.</p>
         <div class="sync-code" id="sync-host-code">— — — — —</div>
         <p class="sync-status" id="sync-host-status"></p>
-        <button type="button" class="btn btn-primary" id="sync-host-btn">Start hosting</button>
       </div>
 
       <div class="sync-panel" data-sync-panel="join" hidden>
         <label class="field-label-sm" for="sync-join-code">Meeting code</label>
         <input type="text" id="sync-join-code" class="role-name-input sync-join-input" maxlength="5" autocapitalize="characters" autocomplete="off" placeholder="e.g. K7QJ2">
         <p class="sync-status" id="sync-join-status"></p>
-        <button type="button" class="btn btn-primary" id="sync-join-btn">Join as viewer</button>
       </div>
 
       <div class="confirm-actions">
+        <button type="button" class="btn btn-primary" id="sync-host-btn">Start hosting</button>
+        <button type="button" class="btn btn-primary" id="sync-join-btn" hidden>Join as viewer</button>
         <button type="button" class="btn btn-secondary" id="sync-disconnect-btn" hidden>Disconnect</button>
         <button type="button" class="btn btn-secondary" id="sync-close-btn">Close</button>
       </div>

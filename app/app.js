@@ -1034,7 +1034,20 @@
     }
   }
 
+  // Keeps the two primary actions (Start hosting / Join as viewer) and the
+  // shared Disconnect/Close pair on one row, showing only what's relevant
+  // to the active tab and current connection state — at most two buttons
+  // are ever visible at once.
+  function updateSyncActionButtons() {
+    var activeTab = document.querySelector(".sync-tab.is-active").dataset.syncTab;
+    var isHosting = window.CadenceSync && window.CadenceSync.getRole() === "controller";
+    el.syncHostBtn.hidden = activeTab !== "host" || isHosting;
+    el.syncJoinBtn.hidden = activeTab !== "join";
+    el.syncDisconnectBtn.hidden = !isHosting;
+  }
+
   el.syncOpenBtn.addEventListener("click", function () {
+    updateSyncActionButtons();
     el.syncDialog.hidden = false;
   });
   el.syncCloseBtn.addEventListener("click", function () {
@@ -1050,6 +1063,7 @@
       el.syncPanels.forEach(function (p) {
         p.hidden = p.dataset.syncPanel !== tab.dataset.syncTab;
       });
+      updateSyncActionButtons();
     });
   });
 
@@ -1062,8 +1076,7 @@
       el.syncHostBtn.disabled = false;
       if (role === "controller") {
         setSyncStatus(el.syncHostStatus, "Hosting — waiting for viewers…", "is-ok");
-        el.syncHostBtn.hidden = true;
-        el.syncDisconnectBtn.hidden = false;
+        updateSyncActionButtons();
         updateSyncBadge();
       } else {
         window.CadenceSync.leave();
@@ -1098,10 +1111,9 @@
 
   el.syncDisconnectBtn.addEventListener("click", function () {
     window.CadenceSync.leave();
-    el.syncHostBtn.hidden = false;
-    el.syncDisconnectBtn.hidden = true;
     el.syncHostCode.textContent = "— — — — —";
     setSyncStatus(el.syncHostStatus, "");
+    updateSyncActionButtons();
     updateSyncBadge();
   });
 
