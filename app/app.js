@@ -157,10 +157,12 @@
 
   function saveRuntime(runtime) {
     localStorage.setItem(RUNTIME_KEY, JSON.stringify(runtime));
+    if (window.CadenceSync) window.CadenceSync.broadcastState(config, runtime);
   }
 
   function clearRuntime() {
     localStorage.removeItem(RUNTIME_KEY);
+    if (window.CadenceSync) window.CadenceSync.broadcastState(config, null);
   }
 
   function loadThemePreference() {
@@ -222,7 +224,41 @@
     confirmOverlay: document.getElementById("confirm-dialog"),
     confirmTitle: document.getElementById("confirm-title"),
     confirmOkBtn: document.getElementById("confirm-ok-btn"),
-    confirmCancelBtn: document.getElementById("confirm-cancel-btn")
+    confirmCancelBtn: document.getElementById("confirm-cancel-btn"),
+
+    syncOpenBtn: document.getElementById("sync-open-btn"),
+    syncStatusBadge: document.getElementById("sync-status-badge"),
+    syncDialog: document.getElementById("sync-dialog"),
+    syncTabs: document.querySelectorAll(".sync-tab"),
+    syncPanels: document.querySelectorAll(".sync-panel"),
+    syncHostCode: document.getElementById("sync-host-code"),
+    syncHostStatus: document.getElementById("sync-host-status"),
+    syncHostBtn: document.getElementById("sync-host-btn"),
+    syncJoinCode: document.getElementById("sync-join-code"),
+    syncJoinStatus: document.getElementById("sync-join-status"),
+    syncJoinBtn: document.getElementById("sync-join-btn"),
+    syncDisconnectBtn: document.getElementById("sync-disconnect-btn"),
+    syncCloseBtn: document.getElementById("sync-close-btn"),
+
+    viewerScreen: document.getElementById("viewer-screen"),
+    viewerPaceBarFill: document.getElementById("viewer-pace-bar-fill"),
+    viewerPaceBarTick: document.getElementById("viewer-pace-bar-tick"),
+    viewerPaceLabel: document.getElementById("viewer-pace-label"),
+    viewerSpotlightCard: document.getElementById("viewer-spotlight-card"),
+    viewerSpotlightFill: document.getElementById("viewer-spotlight-fill"),
+    viewerSpotlightOverflow: document.getElementById("viewer-spotlight-overflow"),
+    viewerSpotlightName: document.getElementById("viewer-spotlight-name"),
+    viewerSpotlightSubtitle: document.getElementById("viewer-spotlight-subtitle"),
+    viewerStatElapsed: document.getElementById("viewer-stat-elapsed"),
+    viewerStatRemaining: document.getElementById("viewer-stat-remaining"),
+    viewerStatRemainingLabel: document.getElementById("viewer-stat-remaining-label"),
+    viewerStatBudget: document.getElementById("viewer-stat-budget"),
+    viewerAlertsBtn: document.getElementById("viewer-alerts-btn"),
+    viewerLeaveBtn: document.getElementById("viewer-leave-btn"),
+    viewerAlertsDialog: document.getElementById("viewer-alerts-dialog"),
+    viewerAlertsCloseBtn: document.getElementById("viewer-alerts-close-btn"),
+    viewerSoundToggle: document.getElementById("viewer-sound-toggle"),
+    viewerVibrationToggle: document.getElementById("viewer-vibration-toggle")
   };
 
   // ---------- Confirm dialog (reusable) ----------
@@ -285,15 +321,39 @@
   function initAlertToggles() {
     el.soundToggle.checked = alertPrefs.sound;
     el.vibrationToggle.checked = alertPrefs.vibration;
+    el.viewerSoundToggle.checked = alertPrefs.sound;
+    el.viewerVibrationToggle.checked = alertPrefs.vibration;
   }
 
+  // Sound/vibration are one shared, per-device preference with two entry
+  // points (the setup screen's Alerts section, and the viewer screen's
+  // alert settings) — each toggle keeps its twin in sync.
   el.soundToggle.addEventListener("change", function () {
     alertPrefs.sound = el.soundToggle.checked;
+    el.viewerSoundToggle.checked = alertPrefs.sound;
     saveAlertPrefs(alertPrefs);
   });
   el.vibrationToggle.addEventListener("change", function () {
     alertPrefs.vibration = el.vibrationToggle.checked;
+    el.viewerVibrationToggle.checked = alertPrefs.vibration;
     saveAlertPrefs(alertPrefs);
+  });
+  el.viewerSoundToggle.addEventListener("change", function () {
+    alertPrefs.sound = el.viewerSoundToggle.checked;
+    el.soundToggle.checked = alertPrefs.sound;
+    saveAlertPrefs(alertPrefs);
+  });
+  el.viewerVibrationToggle.addEventListener("change", function () {
+    alertPrefs.vibration = el.viewerVibrationToggle.checked;
+    el.vibrationToggle.checked = alertPrefs.vibration;
+    saveAlertPrefs(alertPrefs);
+  });
+
+  el.viewerAlertsBtn.addEventListener("click", function () {
+    el.viewerAlertsDialog.hidden = false;
+  });
+  el.viewerAlertsCloseBtn.addEventListener("click", function () {
+    el.viewerAlertsDialog.hidden = true;
   });
 
   // ---------- Setup screen ----------
@@ -466,6 +526,7 @@
   function showSetupScreen() {
     stopTicking();
     el.activeScreen.hidden = true;
+    el.viewerScreen.hidden = true;
     el.setupScreen.hidden = false;
     el.tintOverlay.style.backgroundColor = "transparent";
     renderSetupScreen(loadConfig());
@@ -473,6 +534,7 @@
 
   function showActiveScreen() {
     el.setupScreen.hidden = true;
+    el.viewerScreen.hidden = true;
     el.activeScreen.hidden = false;
     buildRoleCards();
     startTicking();
@@ -653,45 +715,64 @@
     return total;
   }
 
-  function updatePaceAndTint(nowMs, elapsedSeconds) {
+  // Shared by the controller's own pace bar and the viewer screen's —
+  // both derive the identical pace signal from the same config/runtime,
+  // just written to different DOM elements.
+  function computePaceState(nowMs, elapsedSeconds) {
     var budget = config.meetingBudgetSeconds;
     var expected = expectedElapsedForProgress(nowMs);
     var delta = expected - elapsedSeconds; // positive = ahead, negative = behind
+    return {
+      fillPct: clamp((elapsedSeconds / budget) * 100, 0, 100),
+      tickPct: clamp((expected / budget) * 100, 0, 100),
+      state: Math.abs(delta) <= PACE_DEADZONE_SECONDS ? "neutral" : (delta > 0 ? "ahead" : "behind"),
+      delta: delta
+    };
+  }
 
-    var fillPct = clamp((elapsedSeconds / budget) * 100, 0, 100);
-    var tickPct = clamp((expected / budget) * 100, 0, 100);
-    el.paceBarFill.style.width = fillPct + "%";
-    el.paceBarTick.style.left = tickPct + "%";
+  function applyPaceToBar(fillEl, tickEl, labelEl, pace) {
+    var fillColorVar = pace.state === "ahead" ? "var(--pace-good)" : pace.state === "behind" ? "var(--pace-bad)" : "var(--pace-neutral)";
+    fillEl.style.width = pace.fillPct + "%";
+    tickEl.style.left = pace.tickPct + "%";
+    fillEl.style.backgroundColor = fillColorVar;
+    labelEl.textContent = pace.state === "neutral" ? "On pace" :
+      (pace.state === "ahead" ? "Ahead by " + formatClock(Math.abs(pace.delta)) : "Behind by " + formatClock(Math.abs(pace.delta)));
+  }
 
-    var state = Math.abs(delta) <= PACE_DEADZONE_SECONDS ? "neutral" : (delta > 0 ? "ahead" : "behind");
-    var fillColorVar = state === "ahead" ? "var(--pace-good)" : state === "behind" ? "var(--pace-bad)" : "var(--pace-neutral)";
-    el.paceBarFill.style.backgroundColor = fillColorVar;
-    el.paceLabel.textContent = state === "neutral" ? "On pace" :
-      (state === "ahead" ? "Ahead by " + formatClock(Math.abs(delta)) : "Behind by " + formatClock(Math.abs(delta)));
-
-    var magnitude = clamp(Math.abs(delta) / TINT_CAP_SECONDS, 0, 1);
-    var alpha = state === "neutral" ? 0 : magnitude * TINT_MAX_ALPHA;
+  function applyTint(pace) {
+    var magnitude = clamp(Math.abs(pace.delta) / TINT_CAP_SECONDS, 0, 1);
+    var alpha = pace.state === "neutral" ? 0 : magnitude * TINT_MAX_ALPHA;
     if (alpha === 0) {
       el.tintOverlay.style.backgroundColor = "transparent";
     } else {
-      var tintRgbVar = state === "behind" ? "--tint-red-rgb" : "--tint-green-rgb";
+      var tintRgbVar = pace.state === "behind" ? "--tint-red-rgb" : "--tint-green-rgb";
       var tintRgb = getComputedStyle(document.documentElement).getPropertyValue(tintRgbVar);
       el.tintOverlay.style.backgroundColor = "rgba(" + tintRgb + ", " + alpha.toFixed(3) + ")";
     }
   }
 
-  function updateBottomBar(elapsedSeconds) {
+  function updatePaceAndTint(nowMs, elapsedSeconds) {
+    var pace = computePaceState(nowMs, elapsedSeconds);
+    applyPaceToBar(el.paceBarFill, el.paceBarTick, el.paceLabel, pace);
+    applyTint(pace);
+  }
+
+  function applyBottomBar(elapsedEl, remainingEl, remainingLabelEl, budgetEl, elapsedSeconds) {
     var budget = config.meetingBudgetSeconds;
     var remaining = budget - elapsedSeconds;
-    el.statElapsed.textContent = formatClock(elapsedSeconds);
-    el.statBudget.textContent = formatClock(budget);
+    elapsedEl.textContent = formatClock(elapsedSeconds);
+    budgetEl.textContent = formatClock(budget);
     if (remaining >= 0) {
-      el.statRemainingLabel.textContent = "Remaining";
-      el.statRemaining.textContent = formatClock(remaining);
+      remainingLabelEl.textContent = "Remaining";
+      remainingEl.textContent = formatClock(remaining);
     } else {
-      el.statRemainingLabel.textContent = "Over";
-      el.statRemaining.textContent = "+" + formatClock(Math.abs(remaining));
+      remainingLabelEl.textContent = "Over";
+      remainingEl.textContent = "+" + formatClock(Math.abs(remaining));
     }
+  }
+
+  function updateBottomBar(elapsedSeconds) {
+    applyBottomBar(el.statElapsed, el.statRemaining, el.statRemainingLabel, el.statBudget, elapsedSeconds);
   }
 
   function updateAllDoneBanner() {
@@ -785,11 +866,252 @@
     }
   }
 
+  // ---------- Viewer screen (read-only mirror of another device) ----------
+  //
+  // A device is only ever one role at a time, so the viewer reuses the
+  // same config/runtime variables the controller path would otherwise
+  // populate locally — they're just filled in from network state instead
+  // of localStorage here. Elapsed/remaining times are still derived from
+  // the timestamps inside that runtime, so once a snapshot arrives this
+  // renders identically to the controller's own screen, no continuous
+  // network traffic required.
+
+  var viewerRafHandle = null;
+  var viewerAlarmPlaying = false;
+  var viewerEverConnected = false;
+
+  function updateViewerSpotlight(nowMs) {
+    var card = el.viewerSpotlightCard;
+
+    if (!runtime.activeTurn) {
+      var totalRemaining = 0;
+      config.roles.forEach(function (role) {
+        var state = runtime.roles[role.id];
+        totalRemaining += state ? state.remaining : 0;
+      });
+      card.classList.add("is-idle");
+      card.classList.remove("is-active", "is-danger");
+      card.style.removeProperty("--live-rgb");
+      el.viewerSpotlightFill.style.height = "0%";
+      el.viewerSpotlightFill.style.backgroundColor = "";
+      el.viewerSpotlightOverflow.textContent = "";
+      el.viewerSpotlightName.textContent = totalRemaining === 0 ? "All done" : "No one is speaking";
+      el.viewerSpotlightSubtitle.textContent = "";
+      document.title = "Cadence — Viewer";
+      if (viewerAlarmPlaying && window.CadenceAudio) {
+        window.CadenceAudio.stopAlarm();
+        viewerAlarmPlaying = false;
+      }
+      return;
+    }
+
+    var activeRole = config.roles.filter(function (r) { return r.id === runtime.activeTurn.roleId; })[0];
+    card.classList.remove("is-idle");
+    card.classList.add("is-active");
+    el.viewerSpotlightName.textContent = activeRole ? activeRole.name : "";
+
+    var turnElapsed = (nowMs - runtime.activeTurn.startedAt) / 1000;
+    var allowance = runtime.activeTurn.allowanceSeconds;
+    var fraction = turnElapsed / allowance;
+    var isDanger = fraction >= 1;
+    card.classList.toggle("is-danger", isDanger);
+
+    var quantizedFraction = Math.floor(turnElapsed) / allowance;
+    var fillPct = clamp(quantizedFraction * 100, 0, TURN_OVERFLOW_CAP_FRACTION * 100);
+    el.viewerSpotlightFill.style.height = fillPct + "%";
+
+    var liveRgb = turnColorForFraction(fraction).join(", ");
+    el.viewerSpotlightFill.style.backgroundColor = "rgb(" + liveRgb + ")";
+    card.style.setProperty("--live-rgb", liveRgb);
+
+    if (isDanger) {
+      var overflowLabel = "+" + formatDurationUnits(turnElapsed - allowance);
+      el.viewerSpotlightOverflow.textContent = overflowLabel;
+      el.viewerSpotlightSubtitle.textContent = overflowLabel;
+      if (!viewerAlarmPlaying && window.CadenceAudio && (alertPrefs.sound || alertPrefs.vibration)) {
+        window.CadenceAudio.startAlarm({ sound: alertPrefs.sound, vibrate: alertPrefs.vibration });
+        viewerAlarmPlaying = true;
+      }
+      document.title = overflowLabel + " over — Cadence";
+    } else {
+      el.viewerSpotlightSubtitle.textContent = formatDurationUnits(turnElapsed);
+      document.title = "Cadence — Viewer";
+    }
+  }
+
+  function renderIdleViewerState(message) {
+    el.viewerSpotlightCard.classList.add("is-idle");
+    el.viewerSpotlightCard.classList.remove("is-active", "is-danger");
+    el.viewerSpotlightCard.style.removeProperty("--live-rgb");
+    el.viewerSpotlightFill.style.height = "0%";
+    el.viewerSpotlightFill.style.backgroundColor = "";
+    el.viewerSpotlightOverflow.textContent = "";
+    el.viewerSpotlightName.textContent = message;
+    el.viewerSpotlightSubtitle.textContent = "";
+    el.viewerPaceLabel.textContent = "—";
+    el.viewerPaceBarFill.style.width = "0%";
+    el.viewerPaceBarTick.style.left = "0%";
+    el.viewerStatElapsed.textContent = "0:00";
+    el.viewerStatRemaining.textContent = "0:00";
+    el.viewerStatBudget.textContent = "0:00";
+    el.tintOverlay.style.backgroundColor = "transparent";
+  }
+
+  function viewerTick() {
+    if (!runtime || runtime.status !== "running") {
+      renderIdleViewerState(viewerEverConnected ? "Meeting ended" : "Waiting for host…");
+      viewerRafHandle = requestAnimationFrame(viewerTick);
+      return;
+    }
+    viewerEverConnected = true;
+    var nowMs = Date.now();
+    var elapsedSeconds = (nowMs - runtime.meetingStartedAt) / 1000;
+    var pace = computePaceState(nowMs, elapsedSeconds);
+    applyPaceToBar(el.viewerPaceBarFill, el.viewerPaceBarTick, el.viewerPaceLabel, pace);
+    applyTint(pace);
+    applyBottomBar(el.viewerStatElapsed, el.viewerStatRemaining, el.viewerStatRemainingLabel, el.viewerStatBudget, elapsedSeconds);
+    updateViewerSpotlight(nowMs);
+    viewerRafHandle = requestAnimationFrame(viewerTick);
+  }
+
+  function startViewerTicking() {
+    if (viewerRafHandle) cancelAnimationFrame(viewerRafHandle);
+    viewerRafHandle = requestAnimationFrame(viewerTick);
+  }
+
+  function stopViewerTicking() {
+    if (viewerRafHandle) cancelAnimationFrame(viewerRafHandle);
+    viewerRafHandle = null;
+    if (viewerAlarmPlaying && window.CadenceAudio) {
+      window.CadenceAudio.stopAlarm();
+      viewerAlarmPlaying = false;
+    }
+  }
+
+  function showViewerScreen() {
+    stopTicking();
+    el.setupScreen.hidden = true;
+    el.activeScreen.hidden = true;
+    el.viewerScreen.hidden = false;
+    viewerEverConnected = false;
+    startViewerTicking();
+  }
+
+  // ---------- Sync dialog (host/join another device) ----------
+
+  function setSyncStatus(statusEl, text, kind) {
+    statusEl.textContent = text;
+    statusEl.classList.remove("is-error", "is-ok");
+    if (kind) statusEl.classList.add(kind);
+  }
+
+  function updateSyncBadge() {
+    if (window.CadenceSync && window.CadenceSync.getRole() === "controller") {
+      var n = window.CadenceSync.getPeerCount();
+      el.syncStatusBadge.hidden = false;
+      el.syncStatusBadge.textContent = n === 0 ? "Hosting" : "Hosting · " + n + (n === 1 ? " viewer" : " viewers");
+    } else {
+      el.syncStatusBadge.hidden = true;
+    }
+  }
+
+  el.syncOpenBtn.addEventListener("click", function () {
+    el.syncDialog.hidden = false;
+  });
+  el.syncCloseBtn.addEventListener("click", function () {
+    el.syncDialog.hidden = true;
+  });
+
+  el.syncTabs.forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      el.syncTabs.forEach(function (t) {
+        t.classList.toggle("is-active", t === tab);
+        t.setAttribute("aria-selected", t === tab ? "true" : "false");
+      });
+      el.syncPanels.forEach(function (p) {
+        p.hidden = p.dataset.syncPanel !== tab.dataset.syncTab;
+      });
+    });
+  });
+
+  el.syncHostBtn.addEventListener("click", function () {
+    var code = window.CadenceSync.generateRoomCode();
+    el.syncHostCode.textContent = code.split("").join(" ");
+    el.syncHostBtn.disabled = true;
+    setSyncStatus(el.syncHostStatus, "Connecting…");
+    window.CadenceSync.hostMeeting(code).then(function (role) {
+      el.syncHostBtn.disabled = false;
+      if (role === "controller") {
+        setSyncStatus(el.syncHostStatus, "Hosting — waiting for viewers…", "is-ok");
+        el.syncHostBtn.hidden = true;
+        el.syncDisconnectBtn.hidden = false;
+        updateSyncBadge();
+      } else {
+        window.CadenceSync.leave();
+        el.syncHostCode.textContent = "— — — — —";
+        setSyncStatus(el.syncHostStatus, "That code is already in use — try again.", "is-error");
+      }
+    }).catch(function () {
+      el.syncHostBtn.disabled = false;
+      setSyncStatus(el.syncHostStatus, "Couldn't connect. Check your connection and try again.", "is-error");
+    });
+  });
+
+  el.syncJoinBtn.addEventListener("click", function () {
+    var code = el.syncJoinCode.value.trim().toUpperCase();
+    if (!code) {
+      setSyncStatus(el.syncJoinStatus, "Enter a code.", "is-error");
+      return;
+    }
+    el.syncJoinBtn.disabled = true;
+    setSyncStatus(el.syncJoinStatus, "Connecting…");
+    window.CadenceSync.joinMeeting(code).then(function () {
+      el.syncJoinBtn.disabled = false;
+      el.syncJoinCode.value = "";
+      setSyncStatus(el.syncJoinStatus, "");
+      el.syncDialog.hidden = true;
+      showViewerScreen();
+    }).catch(function () {
+      el.syncJoinBtn.disabled = false;
+      setSyncStatus(el.syncJoinStatus, "Couldn't connect. Check the code and your connection.", "is-error");
+    });
+  });
+
+  el.syncDisconnectBtn.addEventListener("click", function () {
+    window.CadenceSync.leave();
+    el.syncHostBtn.hidden = false;
+    el.syncDisconnectBtn.hidden = true;
+    el.syncHostCode.textContent = "— — — — —";
+    setSyncStatus(el.syncHostStatus, "");
+    updateSyncBadge();
+  });
+
+  el.viewerLeaveBtn.addEventListener("click", function () {
+    showConfirm("Leave and stop viewing this meeting?").then(function (ok) {
+      if (!ok) return;
+      window.CadenceSync.leave();
+      stopViewerTicking();
+      showSetupScreen();
+    });
+  });
+
   // ---------- Boot ----------
 
   function boot() {
     initTheme();
     initAlertToggles();
+
+    if (window.CadenceSync) {
+      window.CadenceSync.onStateReceived = function (payload) {
+        config = payload.config;
+        runtime = payload.runtime;
+      };
+      window.CadenceSync.onControllerLost = function () {
+        renderIdleViewerState("Host disconnected");
+      };
+      window.CadenceSync.onPeerCountChange = updateSyncBadge;
+    }
+
     var storedRuntime = loadRuntime();
     if (storedRuntime) {
       config = loadConfig();

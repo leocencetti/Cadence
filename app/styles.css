@@ -170,6 +170,7 @@ button {
   min-height: 44px;
   transition: transform 0.15s ease, opacity 0.15s ease;
 }
+.btn[hidden] { display: none; }
 .btn:active { transform: scale(0.97); }
 
 .btn-primary {
@@ -206,6 +207,7 @@ button {
   font-size: 1.25rem;
   cursor: pointer;
 }
+.icon-btn[hidden] { display: none; }
 .icon-btn:hover { background: var(--surface-2); }
 
 /* ============================================================
@@ -449,11 +451,23 @@ button {
   justify-content: space-between;
   padding: 16px 4px;
 }
+.top-bar-left { display: flex; align-items: center; gap: 8px; }
 .app-title-small {
   font-size: 1.2rem;
   font-weight: 700;
 }
 .top-bar-right { display: flex; gap: 4px; }
+
+.sync-status-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 3px 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
 
 .pace-bar-wrap { margin: 4px 4px 20px; }
 .pace-bar {
@@ -741,7 +755,78 @@ button {
   box-shadow: var(--shadow-elevated);
 }
 .confirm-title { margin: 0 0 20px; font-size: 1rem; }
-.confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.confirm-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+/* ---------- Sync dialog (host/join) ---------- */
+
+.sync-box { max-width: 400px; }
+.sync-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--surface-2);
+  border-radius: var(--radius-control);
+  padding: 4px;
+  margin-bottom: 16px;
+}
+.sync-tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 600;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.sync-tab.is-active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-resting); }
+
+.sync-desc { color: var(--text-muted); font-size: 0.9rem; margin: 0 0 12px; }
+.sync-code {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface-2);
+  border-radius: var(--radius-control);
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.sync-join-input {
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-align: center;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.sync-status { color: var(--text-muted); font-size: 0.85rem; min-height: 1.2em; margin: 0 0 4px; }
+.sync-status.is-error { color: var(--danger); }
+.sync-status.is-ok { color: var(--pace-good); }
+
+/* ---------- Viewer screen ---------- */
+
+.viewer-spotlight-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 4px;
+}
+.role-card.viewer-spotlight {
+  width: 100%;
+  max-width: 520px;
+  min-height: 240px;
+  cursor: default;
+}
+.viewer-spotlight .role-card-content { align-items: center; justify-content: center; text-align: center; }
+.viewer-spotlight-name { font-size: 1.8rem; }
+.viewer-spotlight-subtitle { font-size: 1.2rem; }
+.role-card.viewer-spotlight.is-idle .role-card-name,
+.role-card.viewer-spotlight.is-idle .role-card-subtitle {
+  color: var(--text-muted);
+  background: transparent;
+  text-shadow: none;
+}
 
 /* ============================================================
    Responsive breakpoints — tested at 360 / 768 / 1440 (§6)
