@@ -18,6 +18,7 @@
   --border-subtle: #dde1e7;
 
   --accent: #4f6df5;
+  --accent-rgb: 79, 109, 245;
   --accent-text: #ffffff;
 
   --shadow-resting: 0 1px 2px rgba(20, 22, 30, 0.06), 0 6px 16px -6px rgba(20, 22, 30, 0.14);
@@ -55,6 +56,7 @@
     --border-subtle: #33384333;
 
     --accent: #7d95ff;
+    --accent-rgb: 125, 149, 255;
     --accent-text: #101322;
 
     --shadow-resting: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 16px -6px rgba(0, 0, 0, 0.55);
@@ -87,6 +89,7 @@
   --border-subtle: #33384333;
 
   --accent: #7d95ff;
+  --accent-rgb: 125, 149, 255;
   --accent-text: #101322;
 
   --shadow-resting: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 16px -6px rgba(0, 0, 0, 0.55);
@@ -292,13 +295,26 @@ button {
 
 .role-row {
   display: grid;
-  grid-template-columns: 1.4fr 1.2fr 1fr auto;
+  grid-template-columns: 1fr 1fr auto;
+  grid-template-areas:
+    "name name name"
+    "time count remove";
   gap: 12px;
   align-items: start;
   background: var(--surface);
   box-shadow: var(--shadow-resting);
   border-radius: var(--radius-card);
   padding: 14px;
+}
+.role-row-name { grid-area: name; }
+.role-row-time { grid-area: time; }
+.role-row-count { grid-area: count; }
+
+@media (min-width: 560px) {
+  .role-row {
+    grid-template-columns: 1.4fr 1.2fr 1fr auto;
+    grid-template-areas: "name time count remove";
+  }
 }
 .role-name-input {
   width: 100%;
@@ -342,9 +358,9 @@ button {
   font-size: 1rem;
 }
 .role-remove-btn {
+  grid-area: remove;
   align-self: center;
   color: var(--text-muted);
-  margin-top: 18px;
 }
 .role-remove-btn:hover { color: var(--danger); }
 
@@ -435,10 +451,29 @@ button {
   transition: transform 0.3s cubic-bezier(.2,.8,.3,1), opacity 0.3s ease;
   pointer-events: none;
 }
+/* Ghost count reflects how many people are actually left behind the
+   front card (capped at 2 — see §5.3): 1 remaining shows none, 2 shows
+   one, 3+ shows both. Set via data-ghosts by app.js. */
+.stack-wrap[data-ghosts="0"] .ghost--1,
+.stack-wrap[data-ghosts="0"] .ghost--2,
+.stack-wrap[data-ghosts="1"] .ghost--2 {
+  display: none;
+}
+
 .stack-wrap.fan .ghost--2 { transform: translate(9px, 10px) rotate(4deg); opacity: 1; }
 .stack-wrap.fan .ghost--1 { transform: translate(4px, 5px) rotate(2deg); opacity: 1; }
-.stack-wrap:hover .ghost--2 { transform: translate(9px, 10px) rotate(4deg); opacity: 1; }
-.stack-wrap:hover .ghost--1 { transform: translate(4px, 5px) rotate(2deg); opacity: 1; }
+
+/* Hover-fan (§5.3 trigger 1) is desktop/trackpad only — gated behind a
+   real-hover media query so a touchscreen tap doesn't leave the fan
+   "stuck" open (touch has no hover-exit event to retract it). */
+@media (hover: hover) and (pointer: fine) {
+  .stack-wrap:hover .ghost--2 { transform: translate(9px, 10px) rotate(4deg); opacity: 1; }
+  .stack-wrap:hover .ghost--1 { transform: translate(4px, 5px) rotate(2deg); opacity: 1; }
+  .stack-wrap:hover .role-card:not(.is-active) {
+    transform: translate(-5px, -8px);
+    box-shadow: var(--shadow-elevated);
+  }
+}
 
 .role-card {
   position: relative;
@@ -453,10 +488,6 @@ button {
   padding: 0;
   transition: transform 0.3s cubic-bezier(.34,1.56,.64,1), box-shadow 0.3s ease;
   text-align: left;
-}
-.stack-wrap:hover .role-card {
-  transform: translate(-5px, -8px);
-  box-shadow: var(--shadow-elevated);
 }
 
 .role-card-badge {
@@ -522,9 +553,16 @@ button {
 .role-card.is-exhausted { opacity: 0.4; cursor: default; }
 .role-card.is-exhausted:hover { transform: none; box-shadow: var(--shadow-resting); }
 
-/* Active / currently speaking */
-.role-card.is-active { box-shadow: var(--shadow-elevated); transform: scale(1.04); }
+/* Active / currently speaking — a glow ring makes the active card
+   readable even when its fill is still tiny (a long allotment can
+   take a while to visibly rise). Idle siblings dim while any turn is
+   running so the active card reads clearly against them. */
+.role-card.is-active {
+  box-shadow: 0 0 0 3px var(--accent), 0 0 22px 6px rgba(var(--accent-rgb), 0.55), var(--shadow-elevated);
+  transform: scale(1.04);
+}
 .role-card.is-active .role-card-badge { opacity: 0; pointer-events: none; }
+.role-card.is-dimmed { opacity: 0.5; }
 
 /* Approaching allotment (last ~20%) */
 .role-card.is-warning .role-card-fill { background: var(--warning); }
@@ -546,10 +584,34 @@ button {
   50% { box-shadow: 0 0 0 4px rgba(var(--tint-red-rgb), 0.5), var(--shadow-elevated); }
 }
 
-.role-card.is-settling { transform: scale(0.95); }
+.role-card.is-settling { transform: scale(0.88); }
+
+@keyframes card-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.12); }
+  100% { transform: scale(1.04); }
+}
+.role-card.just-started { animation: card-pop 260ms cubic-bezier(.34,1.56,.64,1); }
+
+.tap-ripple {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-card);
+  background: var(--accent);
+  opacity: 0.4;
+  transform: scale(0.88);
+  animation: tap-ripple 450ms ease-out forwards;
+  pointer-events: none;
+  z-index: 3;
+}
+@keyframes tap-ripple {
+  0% { opacity: 0.4; transform: scale(0.88); }
+  100% { opacity: 0; transform: scale(1.18); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .role-card, .ghost, .pace-bar-fill, .pace-bar-tick { transition: none !important; animation: none !important; }
+  .tap-ripple { display: none; }
 }
 
 /* ---------- Bottom bar ---------- */
@@ -600,12 +662,10 @@ button {
    Responsive breakpoints — tested at 360 / 768 / 1440 (§6)
    ============================================================ */
 
-/* Small phone: keep 2 columns, tighten padding */
+/* Small phone: tighten padding (role-row's own layout already reflows
+   via grid-template-areas above) */
 @media (max-width: 400px) {
   .setup-wrap { padding: 20px 14px 48px; }
-  .role-row { grid-template-columns: 1fr 1fr; }
-  .role-row-count { grid-column: 1 / 2; }
-  .role-remove-btn { grid-column: 2 / 3; justify-self: end; margin-top: 0; }
 }
 
 /* Tablet and up: widen grid, cap card width, center with margins */

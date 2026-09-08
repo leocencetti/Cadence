@@ -12,7 +12,9 @@
   var TURN_WARNING_FRACTION = 0.8; // last ~20% of allotment (§5.6)
   var TURN_OVERFLOW_CAP_FRACTION = 1.3; // fill never visually exceeds ~130% (§5.5)
   var AUTO_FAN_MS = 900;
-  var SETTLE_MS = 220;
+  var SETTLE_MS = 320;
+  var POP_MS = 260;
+  var RIPPLE_MS = 450;
 
   var TINT_CAP_SECONDS = 180; // fully saturated at 3+ minutes off pace (§5.4)
   var TINT_MAX_ALPHA = 0.16;
@@ -44,6 +46,18 @@
     var m = Math.floor(t / 60);
     var s = t % 60;
     return m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  function ghostCountFor(remaining) {
+    // 1 remaining => 0 ghosts, 2 => 1, 3+ => 2 (capped) — §5.3.
+    return clamp(remaining - 1, 0, 2);
+  }
+
+  function spawnRipple(card) {
+    var ripple = document.createElement("span");
+    ripple.className = "tap-ripple";
+    card.appendChild(ripple);
+    setTimeout(function () { ripple.remove(); }, RIPPLE_MS);
   }
 
   function formatAllowance(seconds) {
@@ -453,6 +467,14 @@
       allowanceSeconds: roleConfig.secondsPerPerson
     };
     saveRuntime(runtime);
+
+    if (navigator.vibrate) navigator.vibrate(15);
+    var refs = cardRefs[roleId];
+    if (refs) {
+      spawnRipple(refs.card);
+      refs.card.classList.add("just-started");
+      setTimeout(function () { refs.card.classList.remove("just-started"); }, POP_MS);
+    }
   }
 
   function stopTurn() {
@@ -469,14 +491,19 @@
     runtime.activeTurn = null;
     saveRuntime(runtime);
 
+    if (navigator.vibrate) navigator.vibrate(15);
     var refs = cardRefs[roleId];
     if (refs) {
+      spawnRipple(refs.card);
       refs.card.classList.add("is-settling");
       setTimeout(function () { refs.card.classList.remove("is-settling"); }, SETTLE_MS);
 
       var wrap = refs.wrap;
-      wrap.classList.add("fan");
-      setTimeout(function () { wrap.classList.remove("fan"); }, AUTO_FAN_MS);
+      wrap.dataset.ghosts = String(ghostCountFor(roleState.remaining));
+      if (ghostCountFor(roleState.remaining) > 0) {
+        wrap.classList.add("fan");
+        setTimeout(function () { wrap.classList.remove("fan"); }, AUTO_FAN_MS);
+      }
     }
   }
 
@@ -579,6 +606,7 @@
   }
 
   function updateRoleCards(nowMs) {
+    var hasActiveTurn = !!runtime.activeTurn;
     config.roles.forEach(function (role) {
       var refs = cardRefs[role.id];
       var state = runtime.roles[role.id];
@@ -586,13 +614,17 @@
 
       refs.card.classList.toggle("is-exhausted", !isActive && state.remaining <= 0);
       refs.badge.textContent = state.remaining;
+      refs.wrap.dataset.ghosts = String(ghostCountFor(state.remaining));
 
       if (!isActive) {
         refs.card.classList.remove("is-active", "is-warning", "is-danger");
+        refs.card.classList.toggle("is-dimmed", hasActiveTurn && state.remaining > 0);
         refs.fill.style.height = "0%";
         refs.subtitle.textContent = formatAllowance(role.secondsPerPerson);
         return;
       }
+
+      refs.card.classList.remove("is-dimmed");
 
       var turnElapsed = (nowMs - runtime.activeTurn.startedAt) / 1000;
       var allowance = runtime.activeTurn.allowanceSeconds;
