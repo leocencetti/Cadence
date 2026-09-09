@@ -114,7 +114,26 @@ function claimController() {
 async function connect(code) {
   if (room) leave();
   roomId = code;
-  room = joinRoom({ appId: APP_ID }, code);
+  room = joinRoom({
+    appId: APP_ID,
+    // Trystero's torrent strategy only connects to 3 of its 5 built-in
+    // public WebTorrent trackers by default (relayConfig.redundancy). Any
+    // one of those community-run trackers can be slow, rate-limiting, or
+    // briefly down — with only 3 in play, that's enough to make signaling
+    // (finding the other peer at all, before any WebRTC/NAT question even
+    // applies) noticeably flaky. Using all 5 raises the odds both sides
+    // share a working one.
+    relayConfig: { redundancy: 5 },
+    // Extra public STUN servers alongside Trystero's own defaults (Google
+    // + Cloudflare). This is NOT expected to fix same-LAN flakiness — STUN
+    // only helps NAT traversal, and two devices on one network usually
+    // connect via local candidates without needing STUN at all — but it's
+    // cheap insurance for the off-LAN case.
+    turnConfig: [
+      { urls: "stun:stun.stunprotocol.org:3478" },
+      { urls: "stun:global.stun.twilio.com:3478" }
+    ]
+  }, code);
   actions = wireActions();
 }
 
