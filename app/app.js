@@ -831,10 +831,16 @@
       if (isDanger) {
         var overflowLabel = "+" + formatDurationUnits(turnElapsed - allowance);
         refs.overflow.textContent = overflowLabel;
-        refs.subtitle.textContent = overflowLabel;
+        refs.subtitle.textContent = formatDurationUnits(turnElapsed);
         if (!alarmPlaying && window.CadenceAudio && (alertPrefs.sound || alertPrefs.vibration)) {
-          window.CadenceAudio.startAlarm({ sound: alertPrefs.sound, vibrate: alertPrefs.vibration });
+          window.CadenceAudio.startAlarm({
+            sound: function () { return alertPrefs.sound; },
+            vibrate: function () { return alertPrefs.vibration; }
+          });
           alarmPlaying = true;
+        } else if (alarmPlaying && window.CadenceAudio && !alertPrefs.sound && !alertPrefs.vibration) {
+          window.CadenceAudio.stopAlarm();
+          alarmPlaying = false;
         }
         document.title = overflowLabel + " over — Cadence";
       } else {
@@ -950,10 +956,16 @@
     if (isDanger) {
       var overflowLabel = "+" + formatDurationUnits(turnElapsed - allowance);
       el.viewerSpotlightOverflow.textContent = overflowLabel;
-      el.viewerSpotlightSubtitle.textContent = overflowLabel;
+      el.viewerSpotlightSubtitle.textContent = formatDurationUnits(turnElapsed);
       if (!viewerAlarmPlaying && window.CadenceAudio && (alertPrefs.sound || alertPrefs.vibration)) {
-        window.CadenceAudio.startAlarm({ sound: alertPrefs.sound, vibrate: alertPrefs.vibration });
+        window.CadenceAudio.startAlarm({
+          sound: function () { return alertPrefs.sound; },
+          vibrate: function () { return alertPrefs.vibration; }
+        });
         viewerAlarmPlaying = true;
+      } else if (viewerAlarmPlaying && window.CadenceAudio && !alertPrefs.sound && !alertPrefs.vibration) {
+        window.CadenceAudio.stopAlarm();
+        viewerAlarmPlaying = false;
       }
       document.title = overflowLabel + " over — Cadence";
     } else {
@@ -1009,7 +1021,12 @@
     }
     viewerEverConnected = true;
     el.viewerRetryBtn.hidden = true;
-    var nowMs = Date.now();
+    // Runtime timestamps (meetingStartedAt, activeTurn.startedAt) are all
+    // stamped in the controller's clock, so a viewer whose clock runs a
+    // few seconds ahead or behind subtracts the measured offset before
+    // deriving elapsed time from them — otherwise counters drift apart
+    // between host and viewer even though both are reading the same state.
+    var nowMs = Date.now() - (window.CadenceSync ? window.CadenceSync.getClockOffsetMs() : 0);
     var elapsedSeconds = (nowMs - runtime.meetingStartedAt) / 1000;
     var pace = computePaceState(nowMs, elapsedSeconds);
     applyPaceToBar(el.viewerPaceBarFill, el.viewerPaceBarTick, el.viewerPaceLabel, pace);
@@ -1137,6 +1154,12 @@
     });
   });
 
+  el.syncJoinCode.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    el.syncJoinBtn.click();
+  });
+
   el.syncJoinBtn.addEventListener("click", function () {
     var code = el.syncJoinCode.value.trim().toUpperCase();
     if (!code) {
@@ -1191,6 +1214,12 @@
       window.CadenceSync.onPeerCountChange = updateSyncBadge;
     }
 
+    // A page refresh keeps the meeting content itself (below) but drops the
+    // in-memory WebRTC room, so a stored {role, roomId} is used to silently
+    // rejoin the same room rather than leaving the sync badge/viewer screen
+    // stuck showing a disconnected state until the user reconnects by hand.
+    var storedSession = window.CadenceSync && window.CadenceSync.getStoredSession();
+
     var storedRuntime = loadRuntime();
     if (storedRuntime) {
       config = loadConfig();
@@ -1199,8 +1228,25 @@
         if (!runtime.roles[r.id]) runtime.roles[r.id] = { remaining: r.count };
       });
       showActiveScreen();
+    } else if (storedSession && storedSession.role === "viewer") {
+      showViewerScreen();
     } else {
       showSetupScreen();
+    }
+
+    if (storedSession && storedSession.role === "controller") {
+      window.CadenceSync.hostMeeting(storedSession.roomId).then(function (role) {
+        if (role === "controller") {
+          if (config && runtime) window.CadenceSync.broadcastState(config, runtime);
+        } else {
+          // Another device already claimed the code in the meantime.
+          window.CadenceSync.leave();
+        }
+        updateSyncActionButtons();
+        updateSyncBadge();
+      }).catch(function () {});
+    } else if (storedSession && storedSession.role === "viewer") {
+      window.CadenceSync.joinMeeting(storedSession.roomId).catch(function () {});
     }
   }
 

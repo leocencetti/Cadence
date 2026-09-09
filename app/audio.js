@@ -49,6 +49,7 @@
   function scheduleCycle(playSound, playVibrate) {
     if (playSound) {
       const audioCtx = ensureContext();
+      if (audioCtx.state === "suspended") audioCtx.resume();
       const now = audioCtx.currentTime + 0.02;
       beep(now, 880, 0.12);
       beep(now + 0.16, 880, 0.12);
@@ -59,19 +60,30 @@
   }
 
   // options: { sound, vibrate } — each independently toggleable so a
-  // muted-sound meeting can still buzz, or vice versa.
+  // muted-sound meeting can still buzz, or vice versa. Each may be a plain
+  // boolean (checked once) or a function (called fresh every cycle) — pass
+  // a function backed by the live preference object so toggling sound or
+  // vibration mid-alarm takes effect on the next cycle instead of only on
+  // the next overrun.
+  function resolveFlag(value) {
+    if (typeof value === "function") return value;
+    var fixed = value !== false;
+    return function () { return fixed; };
+  }
+
   function startAlarm(options) {
     if (loopTimer) return;
-    const playSound = !options || options.sound !== false;
-    const playVibrate = !options || options.vibrate !== false;
-    if (playSound) {
+    const getSound = resolveFlag(options && options.sound);
+    const getVibrate = resolveFlag(options && options.vibrate);
+    if (getSound()) {
       const audioCtx = ensureContext();
       if (audioCtx.state === "suspended") {
         audioCtx.resume();
       }
     }
-    scheduleCycle(playSound, playVibrate);
-    loopTimer = setInterval(function () { scheduleCycle(playSound, playVibrate); }, 700);
+    var cycle = function () { scheduleCycle(getSound(), getVibrate()); };
+    cycle();
+    loopTimer = setInterval(cycle, 700);
   }
 
   function stopAlarm() {
