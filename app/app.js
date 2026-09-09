@@ -228,6 +228,8 @@
 
     syncOpenBtn: document.getElementById("sync-open-btn"),
     syncStatusBadge: document.getElementById("sync-status-badge"),
+    syncCodeBadge: document.getElementById("sync-code-badge"),
+    syncCodeBadgeText: document.getElementById("sync-code-badge-text"),
     syncDialog: document.getElementById("sync-dialog"),
     syncTabs: document.querySelectorAll(".sync-tab"),
     syncPanels: document.querySelectorAll(".sync-panel"),
@@ -1062,8 +1064,11 @@
       var n = window.CadenceSync.getPeerCount();
       el.syncStatusBadge.hidden = false;
       el.syncStatusBadge.textContent = n === 0 ? "Hosting" : "Hosting · " + n + (n === 1 ? " viewer" : " viewers");
+      el.syncCodeBadge.hidden = false;
+      el.syncCodeBadgeText.textContent = window.CadenceSync.getRoomId();
     } else {
       el.syncStatusBadge.hidden = true;
+      el.syncCodeBadge.hidden = true;
     }
   }
 
@@ -1078,6 +1083,16 @@
     el.syncJoinBtn.hidden = activeTab !== "join";
     el.syncDisconnectBtn.hidden = !isHosting;
   }
+
+  el.syncCodeBadge.addEventListener("click", function () {
+    var code = window.CadenceSync && window.CadenceSync.getRoomId();
+    if (!code || !navigator.clipboard) return;
+    navigator.clipboard.writeText(code).then(function () {
+      var original = el.syncCodeBadgeText.textContent;
+      el.syncCodeBadgeText.textContent = "Copied!";
+      setTimeout(function () { el.syncCodeBadgeText.textContent = original; }, 1200);
+    });
+  });
 
   el.syncOpenBtn.addEventListener("click", function () {
     updateSyncActionButtons();
