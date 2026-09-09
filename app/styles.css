@@ -469,6 +469,17 @@ button {
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
+.sync-code-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.08em;
+}
+.sync-code-badge[hidden] { display: none; }
+.sync-code-badge:hover { background: var(--border-subtle); }
 
 .pace-bar-wrap { margin: 4px 4px 20px; }
 .pace-bar {
@@ -812,6 +823,10 @@ button {
   align-items: center;
   justify-content: center;
   padding: 16px 4px;
+}
+.viewer-retry-btn {
+  display: block;
+  margin: 4px auto 0;
 }
 .role-card.viewer-spotlight {
   width: 100%;

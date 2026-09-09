@@ -228,6 +228,8 @@
 
     syncOpenBtn: document.getElementById("sync-open-btn"),
     syncStatusBadge: document.getElementById("sync-status-badge"),
+    syncCodeBadge: document.getElementById("sync-code-badge"),
+    syncCodeBadgeText: document.getElementById("sync-code-badge-text"),
     syncDialog: document.getElementById("sync-dialog"),
     syncTabs: document.querySelectorAll(".sync-tab"),
     syncPanels: document.querySelectorAll(".sync-panel"),
@@ -255,6 +257,7 @@
     viewerStatBudget: document.getElementById("viewer-stat-budget"),
     viewerAlertsBtn: document.getElementById("viewer-alerts-btn"),
     viewerLeaveBtn: document.getElementById("viewer-leave-btn"),
+    viewerRetryBtn: document.getElementById("viewer-retry-btn"),
     alertsDialog: document.getElementById("alerts-dialog"),
     alertsDialogHint: document.getElementById("alerts-dialog-hint"),
     alertsDialogCloseBtn: document.getElementById("alerts-dialog-close-btn"),
@@ -979,13 +982,33 @@
     stopViewerAlarm();
   }
 
+  var VIEWER_RETRY_HINT_MS = 12000; // how long to wait with zero peers before offering a retry
+  var viewerJoinedAt = null;
+
+  // Distinguishes "never even found the host" from "found it, just
+  // waiting for Start meeting" — both looked identical before, which made
+  // a genuinely stalled connection indistinguishable from a normal wait.
+  function viewerWaitingMessage() {
+    var hasPeer = window.CadenceSync && window.CadenceSync.getPeerCount() > 0;
+    return hasPeer ? "Connected — waiting for the meeting to start…" : "Looking for host…";
+  }
+
   function viewerTick() {
     if (!runtime || runtime.status !== "running") {
-      renderIdleViewerState(viewerEverConnected ? "Meeting ended" : "Waiting for host…");
+      if (viewerEverConnected) {
+        renderIdleViewerState("Meeting ended");
+        el.viewerRetryBtn.hidden = true;
+      } else {
+        renderIdleViewerState(viewerWaitingMessage());
+        var hasPeerNow = window.CadenceSync && window.CadenceSync.getPeerCount() > 0;
+        var waitedMs = viewerJoinedAt ? Date.now() - viewerJoinedAt : 0;
+        el.viewerRetryBtn.hidden = hasPeerNow || waitedMs < VIEWER_RETRY_HINT_MS;
+      }
       viewerRafHandle = requestAnimationFrame(viewerTick);
       return;
     }
     viewerEverConnected = true;
+    el.viewerRetryBtn.hidden = true;
     var nowMs = Date.now();
     var elapsedSeconds = (nowMs - runtime.meetingStartedAt) / 1000;
     var pace = computePaceState(nowMs, elapsedSeconds);
@@ -1013,8 +1036,20 @@
     el.activeScreen.hidden = true;
     el.viewerScreen.hidden = false;
     viewerEverConnected = false;
+    viewerJoinedAt = Date.now();
+    el.viewerRetryBtn.hidden = true;
     startViewerTicking();
   }
+
+  el.viewerRetryBtn.addEventListener("click", function () {
+    var code = window.CadenceSync.getRoomId();
+    if (!code) return;
+    el.viewerRetryBtn.disabled = true;
+    window.CadenceSync.joinMeeting(code).then(function () {
+      el.viewerRetryBtn.disabled = false;
+      viewerJoinedAt = Date.now();
+    });
+  });
 
   // ---------- Sync dialog (host/join another device) ----------
 
@@ -1029,8 +1064,11 @@
       var n = window.CadenceSync.getPeerCount();
       el.syncStatusBadge.hidden = false;
       el.syncStatusBadge.textContent = n === 0 ? "Hosting" : "Hosting · " + n + (n === 1 ? " viewer" : " viewers");
+      el.syncCodeBadge.hidden = false;
+      el.syncCodeBadgeText.textContent = window.CadenceSync.getRoomId();
     } else {
       el.syncStatusBadge.hidden = true;
+      el.syncCodeBadge.hidden = true;
     }
   }
 
@@ -1045,6 +1083,16 @@
     el.syncJoinBtn.hidden = activeTab !== "join";
     el.syncDisconnectBtn.hidden = !isHosting;
   }
+
+  el.syncCodeBadge.addEventListener("click", function () {
+    var code = window.CadenceSync && window.CadenceSync.getRoomId();
+    if (!code || !navigator.clipboard) return;
+    navigator.clipboard.writeText(code).then(function () {
+      var original = el.syncCodeBadgeText.textContent;
+      el.syncCodeBadgeText.textContent = "Copied!";
+      setTimeout(function () { el.syncCodeBadgeText.textContent = original; }, 1200);
+    });
+  });
 
   el.syncOpenBtn.addEventListener("click", function () {
     updateSyncActionButtons();

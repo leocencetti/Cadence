@@ -84,6 +84,9 @@
       <div class="top-bar-left">
         <span class="app-title-small">Cadence</span>
         <span id="sync-status-badge" class="sync-status-badge" hidden></span>
+        <button type="button" id="sync-code-badge" class="sync-status-badge sync-code-badge" hidden aria-label="Copy meeting code">
+          <i class="ti ti-copy" aria-hidden="true"></i> <span id="sync-code-badge-text"></span>
+        </button>
       </div>
       <div class="top-bar-right">
         <button type="button" class="icon-btn theme-toggle-btn" aria-label="Toggle theme">
@@ -169,6 +172,10 @@
         </div>
       </div>
     </div>
+
+    <button type="button" id="viewer-retry-btn" class="btn btn-secondary viewer-retry-btn" hidden>
+      Taking a while — retry connecting
+    </button>
 
     <footer class="bottom-bar">
       <div class="stat">
